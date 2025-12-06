@@ -18,8 +18,12 @@ namespace ClipStudioDesktop.Services
             _storageService = storageService;
         }
 
+        public bool IsRecording { get; private set; }
+
         public async Task StartRecordingAsync()
         {
+            if (IsRecording) return;
+
             // Initialize Audio Recorder
             _audioRecorder = new AudioRecorder(_settingsService.CurrentSettings);
             _audioRecorder.Start();
@@ -27,12 +31,15 @@ namespace ClipStudioDesktop.Services
             // Initialize Video Recorder
             _videoRecorder = new VideoRecorder(_settingsService.CurrentSettings);
             await _videoRecorder.StartAsync();
+
+            IsRecording = true;
         }
 
         public Task StopRecordingAsync()
         {
             _audioRecorder?.Stop();
             _videoRecorder?.Stop();
+            IsRecording = false;
             return Task.CompletedTask;
         }
 

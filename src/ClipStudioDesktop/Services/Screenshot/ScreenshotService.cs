@@ -25,17 +25,51 @@ namespace ClipStudioDesktop.Services.Screenshot
         {
             try
             {
-                // Capture entire virtual screen (all monitors)
-                int screenLeft = (int)SystemParameters.VirtualScreenLeft;
-                int screenTop = (int)SystemParameters.VirtualScreenTop;
-                int screenWidth = (int)SystemParameters.VirtualScreenWidth;
-                int screenHeight = (int)SystemParameters.VirtualScreenHeight;
+                var settings = _settingsService.CurrentSettings.Screenshot;
+                int x, y, width, height;
 
-                using (Bitmap bitmap = new Bitmap(screenWidth, screenHeight))
+                if (settings.Monitor == "all")
+                {
+                    x = (int)SystemParameters.VirtualScreenLeft;
+                    y = (int)SystemParameters.VirtualScreenTop;
+                    width = (int)SystemParameters.VirtualScreenWidth;
+                    height = (int)SystemParameters.VirtualScreenHeight;
+                }
+                else if (settings.Monitor == "specific")
+                {
+                    var screens = System.Windows.Forms.Screen.AllScreens;
+                    if (settings.MonitorIndex >= 0 && settings.MonitorIndex < screens.Length)
+                    {
+                        var screen = screens[settings.MonitorIndex];
+                        x = screen.Bounds.X;
+                        y = screen.Bounds.Y;
+                        width = screen.Bounds.Width;
+                        height = screen.Bounds.Height;
+                    }
+                    else
+                    {
+                        // Fallback to primary
+                        var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                        x = screen.Bounds.X;
+                        y = screen.Bounds.Y;
+                        width = screen.Bounds.Width;
+                        height = screen.Bounds.Height;
+                    }
+                }
+                else // "primary" or default
+                {
+                    var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                    x = screen.Bounds.X;
+                    y = screen.Bounds.Y;
+                    width = screen.Bounds.Width;
+                    height = screen.Bounds.Height;
+                }
+
+                using (Bitmap bitmap = new Bitmap(width, height))
                 {
                     using (Graphics g = Graphics.FromImage(bitmap))
                     {
-                        g.CopyFromScreen(screenLeft, screenTop, 0, 0, bitmap.Size);
+                        g.CopyFromScreen(x, y, 0, 0, bitmap.Size);
                     }
 
                     SaveScreenshot(bitmap);

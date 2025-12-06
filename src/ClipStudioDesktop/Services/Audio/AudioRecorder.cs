@@ -1,7 +1,9 @@
 using ClipStudioDesktop.Helpers;
 using ClipStudioDesktop.Models;
+using ClipStudioDesktop.Services.Video;
 using NAudio.Wave;
 using System;
+using System.Diagnostics;
 using System.IO;
 
 namespace ClipStudioDesktop.Services.Audio
@@ -81,21 +83,50 @@ namespace ClipStudioDesktop.Services.Audio
 
                 if (audioData.Length == 0) return null;
 
-                string fileName = $"clip_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.wav";
-                string filePath = Path.Combine(outputFolder, fileName);
+                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                string tempWavFile = Path.Combine(outputFolder, $"temp_audio_{timestamp}.wav");
 
-                using (var writer = new WaveFileWriter(filePath, _waveFormat))
+                using (var writer = new WaveFileWriter(tempWavFile, _waveFormat))
                 {
                     writer.Write(audioData, 0, audioData.Length);
                 }
 
-                return filePath;
+                string format = _settings.Audio.Format.ToLower();
+                if (format == "mp3")
+                {
+                    string mp3File = Path.Combine(outputFolder, $"clip_{timestamp}.mp3");
+                    ConvertToMp3(tempWavFile, mp3File);
+                    try { File.Delete(tempWavFile); } catch { }
+                    return mp3File;
+                }
+                else
+                {
+                    string wavFile = Path.Combine(outputFolder, $"clip_{timestamp}.wav");
+                    File.Move(tempWavFile, wavFile);
+                    return wavFile;
+                }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error saving audio clip: {ex.Message}");
                 return null;
             }
+        }
+
+        private void ConvertToMp3(string inputFile, string outputFile)
+        {
+             string ffmpegPath = FFmpegHelper.GetFFmpegPath();
+             string bitrate = $"{_settings.Audio.Bitrate}k";
+             string args = $"-y -i \"{inputFile}\" -c:a libmp3lame -b:a {bitrate} \"{outputFile}\"";
+             
+             var p = Process.Start(new ProcessStartInfo
+             {
+                 FileName = ffmpegPath,
+                 Arguments = args,
+                 UseShellExecute = false,
+                 CreateNoWindow = true
+             });
+             p.WaitForExit();
         }
 
         public void Dispose()

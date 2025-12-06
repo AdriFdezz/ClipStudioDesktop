@@ -32,7 +32,7 @@ namespace ClipStudioDesktop
             _screenshotService = new ScreenshotService(_storageService, _settingsService);
 
             // Initialize ViewModel and Window
-            _mainViewModel = new MainViewModel(_settingsService, _storageService);
+            _mainViewModel = new MainViewModel(_settingsService, _storageService, _recordingService);
             _mainWindow = new Views.MainWindow(_mainViewModel);
 
             // Ensure directories
@@ -65,6 +65,44 @@ namespace ClipStudioDesktop
 
             // Create Context Menu
             var contextMenu = new System.Windows.Controls.ContextMenu();
+
+            // Pause/Resume
+            var toggleItem = new System.Windows.Controls.MenuItem();
+            toggleItem.Header = "Pausar Grabación";
+            toggleItem.Click += async (s, args) => 
+            {
+                if (_recordingService.IsRecording)
+                {
+                    await _recordingService.StopRecordingAsync();
+                    toggleItem.Header = "Reanudar Grabación";
+                }
+                else
+                {
+                    await _recordingService.StartRecordingAsync();
+                    toggleItem.Header = "Pausar Grabación";
+                }
+            };
+            contextMenu.Items.Add(toggleItem);
+
+            // Open Folders
+            var openFoldersItem = new System.Windows.Controls.MenuItem();
+            openFoldersItem.Header = "Abrir carpeta de clips";
+            
+            var openAudio = new System.Windows.Controls.MenuItem { Header = "Audio" };
+            openAudio.Click += (s, args) => System.Diagnostics.Process.Start("explorer.exe", _storageService.GetAudioFolder());
+            openFoldersItem.Items.Add(openAudio);
+
+            var openVideo = new System.Windows.Controls.MenuItem { Header = "Video" };
+            openVideo.Click += (s, args) => System.Diagnostics.Process.Start("explorer.exe", _storageService.GetVideoFolder());
+            openFoldersItem.Items.Add(openVideo);
+
+            var openImages = new System.Windows.Controls.MenuItem { Header = "Imágenes" };
+            openImages.Click += (s, args) => System.Diagnostics.Process.Start("explorer.exe", _storageService.GetImageFolder());
+            openFoldersItem.Items.Add(openImages);
+
+            contextMenu.Items.Add(openFoldersItem);
+
+            contextMenu.Items.Add(new System.Windows.Controls.Separator());
             
             var configItem = new System.Windows.Controls.MenuItem();
             configItem.Header = "Configuración";

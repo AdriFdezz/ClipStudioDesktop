@@ -116,6 +116,63 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
+            <!-- Status Tab -->
+            <TabItem Header="Estado del Sistema">
+                <StackPanel Margin="10">
+                    <GroupBox Header="Estado Actual">
+                        <StackPanel Margin="5">
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Estado de Grabación:" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="Green" FontWeight="Bold"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Uso de Memoria:" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="1" Text="{Binding MemoryUsageText}"/>
+                            </Grid>
+
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Tamaño Buffer (Disco):" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="1" Text="{Binding BufferSizeText}"/>
+                            </Grid>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="Estadísticas de Hoy" Margin="0,10,0,0">
+                        <StackPanel Margin="5">
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Clips Guardados:" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ClipsTodayText}"/>
+                            </Grid>
+
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Espacio Usado:" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="1" Text="{Binding SpaceUsedText}"/>
+                            </Grid>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </TabItem>
         </TabControl>
 
         <!-- Action Buttons -->
