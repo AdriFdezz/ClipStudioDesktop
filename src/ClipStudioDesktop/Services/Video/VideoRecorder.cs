@@ -99,7 +99,7 @@ namespace ClipStudioDesktop.Services.Video
             }
         }
 
-        public async Task<string?> SaveClipAsync(int durationSeconds, string outputFolder)
+        public async Task<string?> SaveClipAsync(int durationSeconds, string outputFolder, string? audioPathToMerge = null)
         {
             if (!_isRecording) return null;
 
@@ -132,28 +132,60 @@ namespace ClipStudioDesktop.Services.Video
                 }
                 await File.WriteAllTextAsync(listFile, sb.ToString());
 
-                // 3. Run FFmpeg concat
+                // 3. Run FFmpeg
                 string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                string outputFile = Path.Combine(outputFolder, $"clip_{timestamp}.mp4");
+                string finalOutputFile = Path.Combine(outputFolder, $"clip_{timestamp}.mp4");
                 string ffmpegPath = FFmpegHelper.GetFFmpegPath();
 
-                // -f concat: Use concat demuxer
-                // -safe 0: Allow unsafe file paths
-                // -i listFile: Input list
-                // -c copy: Stream copy (no re-encoding, fast!)
-                string args = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outputFile}\"";
-
-                var p = Process.Start(new ProcessStartInfo
+                if (string.IsNullOrEmpty(audioPathToMerge))
                 {
-                    FileName = ffmpegPath,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                });
+                    // Video only
+                    string args = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{finalOutputFile}\"";
+                    var p = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = ffmpegPath,
+                        Arguments = args,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    });
+                    await p.WaitForExitAsync();
+                }
+                else
+                {
+                    // Video + Audio Merge
+                    // First concat video to temp file
+                    string tempVideoFile = Path.Combine(_bufferFolder, $"temp_video_{timestamp}.mp4");
+                    string concatArgs = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{tempVideoFile}\"";
+                    
+                    var pConcat = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = ffmpegPath,
+                        Arguments = concatArgs,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    });
+                    await pConcat.WaitForExitAsync();
 
-                await p.WaitForExitAsync();
+                    // Then merge with audio
+                    // -c:v copy: Copy video stream (fast)
+                    // -c:a aac: Encode audio to AAC
+                    // -shortest: Stop when the shortest stream ends (usually audio)
+                    string mergeArgs = $"-y -i \"{tempVideoFile}\" -i \"{audioPathToMerge}\" -c:v copy -c:a aac -shortest \"{finalOutputFile}\"";
+                    
+                    var pMerge = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = ffmpegPath,
+                        Arguments = mergeArgs,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    });
+                    await pMerge.WaitForExitAsync();
 
-                return outputFile;
+                    // Cleanup temp video
+                    try { File.Delete(tempVideoFile); } catch { }
+                }
+
+                return finalOutputFile;
             }
             catch (Exception ex)
             {

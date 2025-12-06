@@ -45,7 +45,23 @@ namespace ClipStudioDesktop.Services
                     string folder = _storageService.GetVideoFolder();
                     _storageService.EnsureDirectoriesExist();
 
-                    string? file = await _videoRecorder.SaveClipAsync(durationSeconds, folder);
+                    string? tempAudioPath = null;
+                    
+                    // Try to get audio to merge
+                    if (_audioRecorder != null)
+                    {
+                        // Save to temp folder
+                        string tempFolder = _settingsService.CurrentSettings.Paths.TempBuffer;
+                        tempAudioPath = _audioRecorder.SaveClip(durationSeconds, tempFolder);
+                    }
+
+                    string? file = await _videoRecorder.SaveClipAsync(durationSeconds, folder, tempAudioPath);
+
+                    // Cleanup temp audio
+                    if (tempAudioPath != null)
+                    {
+                        try { System.IO.File.Delete(tempAudioPath); } catch { }
+                    }
 
                     if (file != null && _settingsService.CurrentSettings.General.ShowNotifications)
                     {
