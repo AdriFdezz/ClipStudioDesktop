@@ -11,21 +11,19 @@
 2. Ve a la carpeta `publish`.
 3. Ejecuta `ClipStudioDesktop.exe`.
 
-## Opción 2: Crear Instalador MSI (Requiere WiX Toolset)
+## Opción 2: Crear Instalador MSI (Automático)
 
-Si deseas crear un instalador `.msi` profesional:
+Si deseas crear un instalador `.msi` profesional "Todo en Uno":
 
-1. Instala **WiX Toolset v3.11** (o superior) desde [wixtoolset.org](https://wixtoolset.org/).
-2. Asegúrate de haber ejecutado `.\build_release.ps1` primero para generar los archivos en `publish`.
-3. Abre una terminal en la carpeta `installer`.
-4. Ejecuta los siguientes comandos (reemplaza `PUT-GUID-HERE` en `setup.wxs` con GUIDs reales generados si es para producción):
-
+1. Instala **WiX Toolset v3.11** desde [wixtoolset.org](https://wixtoolset.org/releases/).
+2. Ejecuta el script de instalación completo:
    ```powershell
-   # Compilar
-   candle setup.wxs -dPublishDir="..\publish" -arch x64
-
-   # Enlazar
-   light setup.wixobj -o ClipStudioDesktop.msi -ext WixUIExtension
+   .\build_installer.ps1
    ```
+   Este script se encargará de:
+   - Compilar la aplicación.
+   - Descargar FFmpeg.
+   - Generar el instalador MSI con interfaz gráfica.
 
-5. Obtendrás `ClipStudioDesktop.msi` que instalará la aplicación y FFmpeg en `Program Files`.
+3. Encontrarás el instalador `ClipStudioDesktop_Setup.msi` en la carpeta raíz.
+
