@@ -1,4 +1,5 @@
 using ClipStudioDesktop.Services.Audio;
+using ClipStudioDesktop.Services.Video;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -9,6 +10,7 @@ namespace ClipStudioDesktop.Services
         private readonly ISettingsService _settingsService;
         private readonly IStorageService _storageService;
         private AudioRecorder? _audioRecorder;
+        private VideoRecorder? _videoRecorder;
 
         public RecordingService(ISettingsService settingsService, IStorageService storageService)
         {
@@ -16,29 +18,40 @@ namespace ClipStudioDesktop.Services
             _storageService = storageService;
         }
 
-        public Task StartRecordingAsync()
+        public async Task StartRecordingAsync()
         {
             // Initialize Audio Recorder
             _audioRecorder = new AudioRecorder(_settingsService.CurrentSettings);
             _audioRecorder.Start();
 
-            // TODO: Initialize Video Recorder
-
-            return Task.CompletedTask;
+            // Initialize Video Recorder
+            _videoRecorder = new VideoRecorder(_settingsService.CurrentSettings);
+            await _videoRecorder.StartAsync();
         }
 
         public Task StopRecordingAsync()
         {
             _audioRecorder?.Stop();
+            _videoRecorder?.Stop();
             return Task.CompletedTask;
         }
 
-        public Task SaveClipAsync(int durationSeconds, bool isVideo)
+        public async Task SaveClipAsync(int durationSeconds, bool isVideo)
         {
             if (isVideo)
             {
-                // TODO: Implement video saving
-                MessageBox.Show($"Video clip saving not implemented yet ({durationSeconds}s)");
+                if (_videoRecorder != null)
+                {
+                    string folder = _storageService.GetVideoFolder();
+                    _storageService.EnsureDirectoriesExist();
+
+                    string? file = await _videoRecorder.SaveClipAsync(durationSeconds, folder);
+
+                    if (file != null && _settingsService.CurrentSettings.General.ShowNotifications)
+                    {
+                        MessageBox.Show($"Video guardado: {file}");
+                    }
+                }
             }
             else
             {
@@ -51,13 +64,10 @@ namespace ClipStudioDesktop.Services
                     
                     if (file != null && _settingsService.CurrentSettings.General.ShowNotifications)
                     {
-                        // TODO: Show proper notification
                         MessageBox.Show($"Audio guardado: {file}");
                     }
                 }
             }
-
-            return Task.CompletedTask;
         }
     }
 }
