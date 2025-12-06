@@ -2,16 +2,41 @@ using System;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using System.Drawing;
+using ClipStudioDesktop.Services;
+using System.Windows.Interop;
 
 namespace ClipStudioDesktop
 {
     public partial class App : Application
     {
         private TaskbarIcon? _taskbarIcon;
+        private ISettingsService _settingsService;
+        private IHotKeyService _hotKeyService;
+        // We need a window to attach hotkeys to, even if hidden
+        private Window _messageWindow;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Initialize Services
+            _settingsService = new SettingsService();
+            _hotKeyService = new HotKeyService();
+
+            // Create a hidden window to handle messages
+            _messageWindow = new Window
+            {
+                Width = 0,
+                Height = 0,
+                WindowStyle = WindowStyle.None,
+                ShowInTaskbar = false,
+                Visibility = Visibility.Hidden
+            };
+            _messageWindow.Show(); // Must show to get handle, but it's 0x0 and hidden
+            var handle = new WindowInteropHelper(_messageWindow).Handle;
+            _hotKeyService.Initialize(handle);
+
+            RegisterConfiguredHotkeys();
 
             // Create the TaskbarIcon
             _taskbarIcon = new TaskbarIcon();
@@ -41,6 +66,26 @@ namespace ClipStudioDesktop
             _taskbarIcon.TrayMouseDoubleClick += (s, args) => OpenConfiguration();
         }
 
+        private void RegisterConfiguredHotkeys()
+        {
+            foreach (var hotkey in _settingsService.CurrentSettings.Hotkeys)
+            {
+                try 
+                {
+                    _hotKeyService.RegisterHotKey(hotkey.Key, () => 
+                    {
+                        // Placeholder action
+                        MessageBox.Show($"Hotkey pressed: {hotkey.Key} ({hotkey.Type})");
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Log error registering hotkey
+                    System.Diagnostics.Debug.WriteLine($"Failed to register hotkey {hotkey.Key}: {ex.Message}");
+                }
+            }
+        }
+
         private void OpenConfiguration()
         {
             foreach (Window window in Windows)
@@ -62,6 +107,7 @@ namespace ClipStudioDesktop
         protected override void OnExit(ExitEventArgs e)
         {
             _taskbarIcon?.Dispose();
+            (_hotKeyService as IDisposable)?.Dispose();
             base.OnExit(e);
         }
     }
