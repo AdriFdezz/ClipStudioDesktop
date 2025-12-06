@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" Name="Clip Studio Desktop" Language="1033" Version="1.0.0.0" Manufacturer="AdriFdezz" UpgradeCode="PUT-GUID-HERE">
+        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <Feature Id="ProductFeature" Title="Clip Studio Desktop" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+            <ComponentRef Id="ApplicationShortcut" />
+        </Feature>
+    </Product>
+
+    <Fragment>
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFiles64Folder">
+                <Directory Id="INSTALLFOLDER" Name="Clip Studio Desktop" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="Clip Studio Desktop"/>
+            </Directory>
+        </Directory>
+    </Fragment>
+
+    <Fragment>
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="PUT-GUID-HERE">
+                <Shortcut Id="ApplicationStartMenuShortcut"
+                          Name="Clip Studio Desktop"
+                          Description="Clip Studio Desktop Recording Tool"
+                          Target="[INSTALLFOLDER]ClipStudioDesktop.exe"
+                          WorkingDirectory="INSTALLFOLDER"/>
+                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+                <RegistryValue Root="HKCU" Key="Software\AdriFdezz\ClipStudioDesktop" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+
+    <Fragment>
+        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <Component Id="ProductComponent" Guid="PUT-GUID-HERE">
+                <File Source="$(var.PublishDir)\ClipStudioDesktop.exe" />
+            </Component>
+            <Component Id="FFmpegComponent" Guid="PUT-GUID-HERE">
+                <File Source="$(var.PublishDir)\ffmpeg.exe" />
+            </Component>
+        </ComponentGroup>
+    </Fragment>
+</Wix>
