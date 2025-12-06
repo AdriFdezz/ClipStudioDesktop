@@ -48,3 +48,12 @@ StyleCop.Cache
 
 # Visual Studio Code
 .vscode/
+
+# Local Tools
+tools/
+publish/
+ffmpeg.exe
+ffmpeg.zip
+*.msi
+*.wixobj
+*.pdb

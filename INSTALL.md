@@ -15,15 +15,16 @@
 
 Si deseas crear un instalador `.msi` profesional "Todo en Uno":
 
-1. Instala **WiX Toolset v3.11** desde [wixtoolset.org](https://wixtoolset.org/releases/).
-2. Ejecuta el script de instalación completo:
+1. Ejecuta el script de instalación completo:
    ```powershell
    .\build_installer.ps1
    ```
    Este script se encargará de:
    - Compilar la aplicación.
-   - Descargar FFmpeg.
+   - Descargar FFmpeg automáticamente.
+   - **Descargar WiX Toolset automáticamente** (si no está instalado).
    - Generar el instalador MSI con interfaz gráfica.
 
-3. Encontrarás el instalador `ClipStudioDesktop_Setup.msi` en la carpeta raíz.
+2. Encontrarás el instalador `ClipStudioDesktop_Setup.msi` en la carpeta raíz.
+
 

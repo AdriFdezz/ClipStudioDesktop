@@ -7,12 +7,33 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== Paso 1: Compilando Aplicación ===" -ForegroundColor Cyan
 .\build_release.ps1
 
-# 2. Verificar si WiX Toolset está instalado
+# 2. Verificar si WiX Toolset está instalado (o descargar versión local)
 $wixPath = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
-if (-not (Test-Path "$wixPath\candle.exe")) {
-    Write-Host "ERROR: WiX Toolset no encontrado en $wixPath" -ForegroundColor Red
-    Write-Host "Por favor instala WiX Toolset v3.11: https://wixtoolset.org/releases/" -ForegroundColor Yellow
-    exit 1
+$localWixPath = ".\tools\wix"
+
+if (-not (Test-Path "$wixPath\candle.exe") -and -not (Test-Path "$localWixPath\candle.exe")) {
+    Write-Host "WiX Toolset no encontrado. Descargando versión portable..." -ForegroundColor Yellow
+    
+    if (-not (Test-Path ".\tools")) { New-Item -ItemType Directory -Path ".\tools" | Out-Null }
+    
+    $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip"
+    $wixZip = ".\tools\wix.zip"
+    
+    try {
+        Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip
+        Expand-Archive -Path $wixZip -DestinationPath $localWixPath -Force
+        Remove-Item $wixZip
+        Write-Host "WiX Toolset descargado correctamente." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Error descargando WiX Toolset: $_" -ForegroundColor Red
+        exit 1
+    }
+}
+
+if (Test-Path "$localWixPath\candle.exe") {
+    Write-Host "Usando WiX Toolset local en $localWixPath" -ForegroundColor Cyan
+    $wixPath = (Resolve-Path $localWixPath).Path
 }
 
 # Agregar WiX al PATH temporalmente
