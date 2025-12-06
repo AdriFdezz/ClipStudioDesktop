@@ -1,12 +1,14 @@
+using ClipStudioDesktop.ViewModels;
 using System.Windows;
 
 namespace ClipStudioDesktop.Views
 {
     public partial class MainWindow : Window
     {
-        public MainWindow()
+        public MainWindow(MainViewModel viewModel)
         {
             InitializeComponent();
+            DataContext = viewModel;
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

@@ -3,6 +3,7 @@ using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using System.Drawing;
 using ClipStudioDesktop.Services.Screenshot;
+using ClipStudioDesktop.ViewModels;
 
 namespace ClipStudioDesktop
 {
@@ -14,6 +15,8 @@ namespace ClipStudioDesktop
         private IRecordingService _recordingService;
         private IStorageService _storageService;
         private IScreenshotService _screenshotService;
+        private MainViewModel _mainViewModel;
+        private Views.MainWindow _mainWindow;
         // We need a window to attach hotkeys to, even if hidden
         private Window _messageWindow;
 
@@ -27,6 +30,10 @@ namespace ClipStudioDesktop
             _storageService = new StorageService(_settingsService);
             _recordingService = new RecordingService(_settingsService, _storageService);
             _screenshotService = new ScreenshotService(_storageService, _settingsService);
+
+            // Initialize ViewModel and Window
+            _mainViewModel = new MainViewModel(_settingsService, _storageService);
+            _mainWindow = new Views.MainWindow(_mainViewModel);
 
             // Ensure directories
             _storageService.EnsureDirectoriesExist();
@@ -116,20 +123,10 @@ namespace ClipStudioDesktop
 
         private void OpenConfiguration()
         {
-            foreach (Window window in Windows)
-            {
-                if (window is Views.MainWindow)
-                {
-                    window.Show();
-                    window.Activate();
-                    if (window.WindowState == WindowState.Minimized)
-                        window.WindowState = WindowState.Normal;
-                    return;
-                }
-            }
-
-            var mainWindow = new Views.MainWindow();
-            mainWindow.Show();
+            _mainWindow.Show();
+            _mainWindow.Activate();
+            if (_mainWindow.WindowState == WindowState.Minimized)
+                _mainWindow.WindowState = WindowState.Normal;
         }
 
         protected override void OnExit(ExitEventArgs e)

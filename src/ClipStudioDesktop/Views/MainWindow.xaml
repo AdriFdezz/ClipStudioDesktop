@@ -4,9 +4,124 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Clip Studio Desktop - Configuración" Height="450" Width="800"
-        ResizeMode="CanMinimize">
-    <Grid>
-        <TextBlock Text="Configuración de Clip Studio Desktop" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20"/>
+        Title="Clip Studio Desktop - Configuración" Height="600" Width="800"
+        ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Clip Studio Desktop" FontSize="24" FontWeight="Bold" Margin="0,0,0,20"/>
+
+        <TabControl Grid.Row="1">
+            <!-- General Tab -->
+            <TabItem Header="General">
+                <StackPanel Margin="10">
+                    <GroupBox Header="Opciones de Inicio">
+                        <StackPanel Margin="5">
+                            <CheckBox Content="Iniciar con Windows" IsChecked="{Binding Settings.General.StartWithWindows}" Margin="0,5"/>
+                            <CheckBox Content="Mostrar notificaciones" IsChecked="{Binding Settings.General.ShowNotifications}" Margin="0,5"/>
+                            <CheckBox Content="Reproducir sonido al guardar" IsChecked="{Binding Settings.General.PlaySoundOnClip}" Margin="0,5"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="Carpetas" Margin="0,10,0,0">
+                        <StackPanel Margin="5">
+                            <Button Content="Abrir carpeta de Audio" Command="{Binding OpenAudioFolderCommand}" Margin="0,5" HorizontalAlignment="Left" Width="200"/>
+                            <Button Content="Abrir carpeta de Video" Command="{Binding OpenVideoFolderCommand}" Margin="0,5" HorizontalAlignment="Left" Width="200"/>
+                            <Button Content="Abrir carpeta de Imágenes" Command="{Binding OpenImagesFolderCommand}" Margin="0,5" HorizontalAlignment="Left" Width="200"/>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </TabItem>
+
+            <!-- Audio/Video Tab -->
+            <TabItem Header="Audio y Video">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="Configuración de Audio">
+                            <Grid Margin="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Formato:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Audio.Format}" SelectedValuePath="Content" Margin="0,5">
+                                    <ComboBoxItem Content="mp3"/>
+                                    <ComboBoxItem Content="wav"/>
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="1" Text="Bitrate (kbps):" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Audio.Bitrate}" Margin="0,5"/>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="Configuración de Video" Margin="0,10,0,0">
+                            <Grid Margin="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Formato:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Video.Format}" SelectedValuePath="Content" Margin="0,5">
+                                    <ComboBoxItem Content="mp4"/>
+                                    <ComboBoxItem Content="mkv"/>
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="1" Text="FPS:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Video.Framerate}" Margin="0,5"/>
+
+                                <TextBlock Grid.Row="2" Text="Bitrate (kbps):" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.Video.Bitrate}" Margin="0,5"/>
+                            </Grid>
+                        </GroupBox>
+                        
+                        <GroupBox Header="Buffer" Margin="0,10,0,0">
+                             <Grid Margin="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Duración máxima (segundos):" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBox Grid.Column="1" Text="{Binding Settings.Buffer.MaxDurationSeconds}" Margin="0,5"/>
+                             </Grid>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Hotkeys Tab -->
+            <TabItem Header="Atajos de Teclado">
+                <DataGrid ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" Margin="10" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Tecla" Binding="{Binding Key}" Width="*"/>
+                        <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="100" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Duración (s)" Binding="{Binding Duration}" Width="100"/>
+                        <DataGridTextColumn Header="Modo" Binding="{Binding Mode}" Width="100"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Action Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Margin="0,0,10,0" Padding="10,5"/>
+            <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Padding="10,5"/>
+        </StackPanel>
     </Grid>
 </Window>
