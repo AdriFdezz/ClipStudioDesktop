@@ -2,8 +2,7 @@ using System;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using System.Drawing;
-using ClipStudioDesktop.Services;
-using System.Windows.Interop;
+using ClipStudioDesktop.Services.Screenshot;
 
 namespace ClipStudioDesktop
 {
@@ -14,6 +13,7 @@ namespace ClipStudioDesktop
         private IHotKeyService _hotKeyService;
         private IRecordingService _recordingService;
         private IStorageService _storageService;
+        private IScreenshotService _screenshotService;
         // We need a window to attach hotkeys to, even if hidden
         private Window _messageWindow;
 
@@ -26,6 +26,7 @@ namespace ClipStudioDesktop
             _hotKeyService = new HotKeyService();
             _storageService = new StorageService(_settingsService);
             _recordingService = new RecordingService(_settingsService, _storageService);
+            _screenshotService = new ScreenshotService(_storageService, _settingsService);
 
             // Ensure directories
             _storageService.EnsureDirectoriesExist();
@@ -94,8 +95,14 @@ namespace ClipStudioDesktop
                         }
                         else if (hotkey.Type == "screenshot")
                         {
-                            // TODO: Implement screenshot
-                            MessageBox.Show($"Screenshot hotkey pressed: {hotkey.Mode}");
+                            if (hotkey.Mode == "selection")
+                            {
+                                await _screenshotService.CaptureSelectionAsync();
+                            }
+                            else
+                            {
+                                await _screenshotService.CaptureFullScreenAsync();
+                            }
                         }
                     });
                 }

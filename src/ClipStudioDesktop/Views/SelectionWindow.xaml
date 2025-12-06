@@ -1,0 +1,36 @@
+<Window x:Class="ClipStudioDesktop.Views.SelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="SelectionWindow" 
+        WindowStyle="None" 
+        ResizeMode="NoResize" 
+        ShowInTaskbar="False" 
+        Topmost="True"
+        WindowState="Maximized"
+        Background="Black"
+        Cursor="Cross">
+    <Grid>
+        <!-- Background Image (The frozen screen) -->
+        <Image x:Name="BackgroundImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+        
+        <!-- Dark Overlay -->
+        <Rectangle Fill="Black" Opacity="0.4"/>
+        
+        <!-- Selection Area (Clear part) -->
+        <Canvas x:Name="SelectionCanvas" MouseDown="Canvas_MouseDown" MouseMove="Canvas_MouseMove" MouseUp="Canvas_MouseUp">
+            <Path x:Name="SelectionPath" Stroke="White" StrokeThickness="1" StrokeDashArray="4 2">
+                <Path.Data>
+                    <RectangleGeometry x:Name="SelectionGeometry" />
+                </Path.Data>
+            </Path>
+            
+            <!-- Dimensions Text -->
+            <Border x:Name="DimensionsBorder" Background="#333333" CornerRadius="4" Padding="4" Visibility="Collapsed">
+                <TextBlock x:Name="DimensionsText" Foreground="White" FontSize="12"/>
+            </Border>
+        </Canvas>
+    </Grid>
+</Window>
