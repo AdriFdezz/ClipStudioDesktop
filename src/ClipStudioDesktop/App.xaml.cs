@@ -12,16 +12,23 @@ namespace ClipStudioDesktop
         private TaskbarIcon? _taskbarIcon;
         private ISettingsService _settingsService;
         private IHotKeyService _hotKeyService;
+        private IRecordingService _recordingService;
+        private IStorageService _storageService;
         // We need a window to attach hotkeys to, even if hidden
         private Window _messageWindow;
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
             // Initialize Services
             _settingsService = new SettingsService();
             _hotKeyService = new HotKeyService();
+            _storageService = new StorageService(_settingsService);
+            _recordingService = new RecordingService(_settingsService, _storageService);
+
+            // Ensure directories
+            _storageService.EnsureDirectoriesExist();
 
             // Create a hidden window to handle messages
             _messageWindow = new Window
@@ -37,6 +44,9 @@ namespace ClipStudioDesktop
             _hotKeyService.Initialize(handle);
 
             RegisterConfiguredHotkeys();
+
+            // Start Recording
+            await _recordingService.StartRecordingAsync();
 
             // Create the TaskbarIcon
             _taskbarIcon = new TaskbarIcon();
@@ -72,10 +82,21 @@ namespace ClipStudioDesktop
             {
                 try 
                 {
-                    _hotKeyService.RegisterHotKey(hotkey.Key, () => 
+                    _hotKeyService.RegisterHotKey(hotkey.Key, async () => 
                     {
-                        // Placeholder action
-                        MessageBox.Show($"Hotkey pressed: {hotkey.Key} ({hotkey.Type})");
+                        if (hotkey.Type == "audio")
+                        {
+                            await _recordingService.SaveClipAsync(hotkey.Duration, false);
+                        }
+                        else if (hotkey.Type == "video")
+                        {
+                            await _recordingService.SaveClipAsync(hotkey.Duration, true);
+                        }
+                        else if (hotkey.Type == "screenshot")
+                        {
+                            // TODO: Implement screenshot
+                            MessageBox.Show($"Screenshot hotkey pressed: {hotkey.Mode}");
+                        }
                     });
                 }
                 catch (Exception ex)
@@ -108,6 +129,7 @@ namespace ClipStudioDesktop
         {
             _taskbarIcon?.Dispose();
             (_hotKeyService as IDisposable)?.Dispose();
+            _recordingService?.StopRecordingAsync();
             base.OnExit(e);
         }
     }
