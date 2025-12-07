@@ -9,6 +9,8 @@ using ClipStudioDesktop.Services.Settings;
 using ClipStudioDesktop.Services.Recording;
 using ClipStudioDesktop.ViewModels;
 
+using ClipStudioDesktop.Helpers;
+
 namespace ClipStudioDesktop
 {
     public partial class App : Application
@@ -34,6 +36,9 @@ namespace ClipStudioDesktop
             _storageService = new StorageService(_settingsService);
             _recordingService = new RecordingService(_settingsService, _storageService);
             _screenshotService = new ScreenshotService(_storageService, _settingsService);
+
+            // Apply Startup Setting
+            StartupHelper.SetStartup(_settingsService.CurrentSettings.General.StartWithWindows);
 
             // Initialize ViewModel and Window
             _mainViewModel = new MainViewModel(_settingsService, _storageService, _recordingService);
@@ -175,7 +180,9 @@ namespace ClipStudioDesktop
         {
             _taskbarIcon?.Dispose();
             (_hotKeyService as IDisposable)?.Dispose();
-            _recordingService?.StopRecordingAsync();
+            _recordingService?.Dispose();
+            base.OnExit(e);
+        }
             base.OnExit(e);
         }
     }

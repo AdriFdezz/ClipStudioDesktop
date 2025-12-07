@@ -85,6 +85,9 @@ namespace ClipStudioDesktop.Services.Screenshot
             return Task.CompletedTask;
         }
 
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+        public static extern bool DeleteObject(IntPtr hObject);
+
         public async Task CaptureSelectionAsync()
         {
             try
@@ -102,11 +105,20 @@ namespace ClipStudioDesktop.Services.Screenshot
                 }
 
                 // Convert to BitmapSource for WPF
-                var bitmapSource = Imaging.CreateBitmapSourceFromHBitmap(
-                    fullScreenBitmap.GetHbitmap(),
-                    IntPtr.Zero,
-                    Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions());
+                IntPtr hBitmap = fullScreenBitmap.GetHbitmap();
+                BitmapSource bitmapSource;
+                try
+                {
+                    bitmapSource = Imaging.CreateBitmapSourceFromHBitmap(
+                        hBitmap,
+                        IntPtr.Zero,
+                        Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
+                }
+                finally
+                {
+                    DeleteObject(hBitmap);
+                }
 
                 // 2. Show Selection Window
                 // Must run on UI thread

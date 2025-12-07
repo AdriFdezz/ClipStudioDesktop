@@ -72,6 +72,6 @@ namespace ClipStudioDesktop.Models
     {
         public int MaxDurationSeconds { get; set; } = 300;
         public int AudioBufferSizeMB { get; set; } = 50;
-        public int VideoBufferSizeMB { get; set; } = 500;
+        public int VideoBufferSizeMB { get; set; } = 1024; // 1GB Reserved
     }
 }

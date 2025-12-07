@@ -106,6 +106,7 @@ namespace ClipStudioDesktop.ViewModels
         private void SaveSettings()
         {
             _settingsService.SaveSettings();
+            StartupHelper.SetStartup(_settingsService.CurrentSettings.General.StartWithWindows);
             MessageBox.Show("Configuración guardada correctamente.", "Clip Studio Desktop", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 

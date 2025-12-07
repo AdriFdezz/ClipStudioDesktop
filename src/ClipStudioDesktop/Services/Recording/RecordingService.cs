@@ -2,12 +2,13 @@ using ClipStudioDesktop.Services.Audio;
 using ClipStudioDesktop.Services.Video;
 using ClipStudioDesktop.Services.Settings;
 using ClipStudioDesktop.Services.Storage;
+using System;
 using System.Threading.Tasks;
 using System.Windows;
 
 namespace ClipStudioDesktop.Services.Recording
 {
-    public class RecordingService : IRecordingService
+    public class RecordingService : IRecordingService, IDisposable
     {
         private readonly ISettingsService _settingsService;
         private readonly IStorageService _storageService;
@@ -43,6 +44,12 @@ namespace ClipStudioDesktop.Services.Recording
             _videoRecorder?.Stop();
             IsRecording = false;
             return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            _audioRecorder?.Dispose();
+            _videoRecorder?.Dispose();
         }
 
         public async Task SaveClipAsync(int durationSeconds, bool isVideo)

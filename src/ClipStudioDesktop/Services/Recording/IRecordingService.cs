@@ -1,8 +1,9 @@
+using System;
 using System.Threading.Tasks;
 
 namespace ClipStudioDesktop.Services.Recording
 {
-    public interface IRecordingService
+    public interface IRecordingService : IDisposable
     {
         bool IsRecording { get; }
         Task StartRecordingAsync();

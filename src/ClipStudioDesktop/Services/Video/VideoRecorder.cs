@@ -39,18 +39,27 @@ namespace ClipStudioDesktop.Services.Video
             string ffmpegPath = FFmpegHelper.GetFFmpegPath();
             string outputFilePattern = Path.Combine(_bufferFolder, "video_%03d.mp4");
 
-            // Command to record desktop in 10s chunks, keeping last 30 chunks (300s)
-            // -y: Overwrite output files
-            // -f gdigrab: Windows GDI capture
-            // -framerate 30: 30 FPS
-            // -i desktop: Capture main screen
-            // -c:v libx264: H.264 encoding
-            // -preset ultrafast: Low CPU usage
-            // -f segment: Segment muxer
-            // -segment_time 10: 10 seconds per segment
-            // -segment_wrap 30: Wrap after 30 segments
-            // -reset_timestamps 1: Reset timestamps for each segment
-            string arguments = $"-y -f gdigrab -framerate 30 -i desktop -c:v libx264 -preset ultrafast -f segment -segment_time 10 -segment_wrap 30 -reset_timestamps 1 \"{outputFilePattern}\"";
+            // Calculate segment wrap based on 1GB reserved space (or configured size)
+            // Size (MB) = (Bitrate (kbps) * Duration (s)) / (8 * 1024)
+            // Duration = (Size * 8 * 1024) / Bitrate
+            // Segments = Duration / SegmentTime
+            
+            int segmentTime = 10;
+            int bitrateKbps = _settings.Video.Bitrate;
+            int targetSizeMB = _settings.Buffer.VideoBufferSizeMB;
+            
+            // Calculate total duration to fill target size
+            // Use long to avoid overflow
+            long totalDurationSeconds = ((long)targetSizeMB * 8 * 1024) / bitrateKbps;
+            
+            // Ensure minimum duration (e.g. 300s)
+            if (totalDurationSeconds < 300) totalDurationSeconds = 300;
+
+            int segmentWrap = (int)(totalDurationSeconds / segmentTime);
+
+            // Command to record desktop
+            // -b:v: Set video bitrate
+            string arguments = $"-y -f gdigrab -framerate {_settings.Video.Framerate} -i desktop -c:v libx264 -preset ultrafast -b:v {bitrateKbps}k -f segment -segment_time {segmentTime} -segment_wrap {segmentWrap} -reset_timestamps 1 \"{outputFilePattern}\"";
 
             var startInfo = new ProcessStartInfo
             {
