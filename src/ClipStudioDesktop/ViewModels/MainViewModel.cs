@@ -107,12 +107,12 @@ namespace ClipStudioDesktop.ViewModels
         {
             _settingsService.SaveSettings();
             StartupHelper.SetStartup(_settingsService.CurrentSettings.General.StartWithWindows);
-            MessageBox.Show("Configuración guardada correctamente.", "Clip Studio Desktop", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show("Configuración guardada correctamente.", "Clip Studio Desktop", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
         }
 
         private void ResetSettings()
         {
-            if (MessageBox.Show("¿Estás seguro de que quieres restaurar los valores por defecto?", "Confirmar", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            if (System.Windows.MessageBox.Show("¿Estás seguro de que quieres restaurar los valores por defecto?", "Confirmar", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.Yes)
             {
                 _settingsService.ResetToDefaults();
                 OnPropertyChanged(nameof(Settings));
@@ -133,7 +133,7 @@ namespace ClipStudioDesktop.ViewModels
             }
             catch (System.Exception ex)
             {
-                MessageBox.Show($"No se pudo abrir la carpeta: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"No se pudo abrir la carpeta: {ex.Message}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
     }

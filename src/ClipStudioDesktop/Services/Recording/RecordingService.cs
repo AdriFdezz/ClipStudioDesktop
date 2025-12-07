@@ -81,7 +81,7 @@ namespace ClipStudioDesktop.Services.Recording
 
                     if (file != null && _settingsService.CurrentSettings.General.ShowNotifications)
                     {
-                        MessageBox.Show($"Video guardado: {file}");
+                        System.Windows.MessageBox.Show($"Video guardado: {file}");
                     }
                 }
             }
@@ -96,7 +96,7 @@ namespace ClipStudioDesktop.Services.Recording
                     
                     if (file != null && _settingsService.CurrentSettings.General.ShowNotifications)
                     {
-                        MessageBox.Show($"Audio guardado: {file}");
+                        System.Windows.MessageBox.Show($"Audio guardado: {file}");
                     }
                 }
             }

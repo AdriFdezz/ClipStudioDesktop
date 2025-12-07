@@ -122,7 +122,7 @@ namespace ClipStudioDesktop.Services.Screenshot
 
                 // 2. Show Selection Window
                 // Must run on UI thread
-                await Application.Current.Dispatcher.InvokeAsync(() =>
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     var selectionWindow = new SelectionWindow(bitmapSource);
                     
@@ -168,8 +168,8 @@ namespace ClipStudioDesktop.Services.Screenshot
             if (_settingsService.CurrentSettings.General.ShowNotifications)
             {
                 // TODO: Better notification
-                Application.Current.Dispatcher.Invoke(() => 
-                    MessageBox.Show($"Captura guardada: {filePath}")
+                System.Windows.Application.Current.Dispatcher.Invoke(() => 
+                    System.Windows.MessageBox.Show($"Captura guardada: {filePath}")
                 );
             }
         }

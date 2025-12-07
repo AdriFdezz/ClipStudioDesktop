@@ -2,6 +2,16 @@
 
 Write-Host "Building Clip Studio Desktop..." -ForegroundColor Cyan
 
+# 0. Check for .NET SDK
+try {
+    $dotnetVersion = dotnet --version
+    Write-Host "Found .NET SDK version: $dotnetVersion" -ForegroundColor Gray
+} catch {
+    Write-Host "ERROR: .NET SDK not found in PATH." -ForegroundColor Red
+    Write-Host "Please install .NET 8.0 SDK from: https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Red
+    exit 1
+}
+
 # 1. Clean previous build
 if (Test-Path ".\publish") {
     Remove-Item ".\publish" -Recurse -Force

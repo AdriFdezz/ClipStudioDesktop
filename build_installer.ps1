@@ -6,6 +6,10 @@ $ErrorActionPreference = "Stop"
 # 1. Compilar la aplicación y descargar dependencias (FFmpeg)
 Write-Host "=== Paso 1: Compilando Aplicación ===" -ForegroundColor Cyan
 .\build_release.ps1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error en la compilación. Abortando." -ForegroundColor Red
+    exit 1
+}
 
 # 2. Verificar si WiX Toolset está instalado (o descargar versión local)
 $wixPath = "C:\Program Files (x86)\WiX Toolset v3.11\bin"

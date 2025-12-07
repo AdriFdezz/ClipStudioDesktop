@@ -7,28 +7,11 @@ namespace ClipStudioDesktop.Services.Video
 {
     public static class FFmpegHelper
     {
-        public static async Task EnsureFFmpegInstalledAsync()
+        public static Task EnsureFFmpegInstalledAsync()
         {
-            // Check if ffmpeg is already available in path or local folder
-            try 
-            {
-                // This will throw if ffmpeg is not found
-                GlobalFFOptions.Configure(new FFOptions { BinaryFolder = "./" });
-                
-                // If we are here, we might want to download it if not present
-                // But FFMpegCore.GlobalFFOptions doesn't have a simple "Check" method without running something.
-                // We'll assume if the user doesn't have it, we download it.
-                
-                string ffmpegPath = Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg.exe");
-                if (!File.Exists(ffmpegPath))
-                {
-                    await FFMpegDownloader.DownloadFFMpeg("ffmpeg");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error checking/downloading FFmpeg: {ex.Message}");
-            }
+            // Configure FFMpegCore to look in the current directory
+            GlobalFFOptions.Configure(new FFOptions { BinaryFolder = AppDomain.CurrentDomain.BaseDirectory });
+            return Task.CompletedTask;
         }
 
         public static string GetFFmpegPath()

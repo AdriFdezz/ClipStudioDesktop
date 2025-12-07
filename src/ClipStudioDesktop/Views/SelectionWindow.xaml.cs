@@ -8,7 +8,7 @@ namespace ClipStudioDesktop.Views
 {
     public partial class SelectionWindow : Window
     {
-        private Point _startPoint;
+        private System.Windows.Point _startPoint;
         private bool _isDragging;
         public Rect SelectedRegion { get; private set; }
         public bool IsConfirmed { get; private set; }
@@ -41,7 +41,7 @@ namespace ClipStudioDesktop.Views
             UpdateDimensionsPosition(_startPoint);
         }
 
-        private void Canvas_MouseMove(object sender, MouseEventArgs e)
+        private void Canvas_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
             if (!_isDragging) return;
 
@@ -56,7 +56,7 @@ namespace ClipStudioDesktop.Views
             SelectionGeometry.Rect = rect;
             
             UpdateDimensionsText(w, h);
-            UpdateDimensionsPosition(new Point(x, y));
+            UpdateDimensionsPosition(new System.Windows.Point(x, y));
         }
 
         private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
@@ -76,7 +76,7 @@ namespace ClipStudioDesktop.Views
             DimensionsText.Text = $"{w:F0} x {h:F0}";
         }
 
-        private void UpdateDimensionsPosition(Point p)
+        private void UpdateDimensionsPosition(System.Windows.Point p)
         {
             Canvas.SetLeft(DimensionsBorder, p.X);
             Canvas.SetTop(DimensionsBorder, p.Y - 25);

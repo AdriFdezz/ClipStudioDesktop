@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Interop;
 using Hardcodet.Wpf.TaskbarNotification;
 using System.Drawing;
 using ClipStudioDesktop.Services.Screenshot;
@@ -13,7 +14,7 @@ using ClipStudioDesktop.Helpers;
 
 namespace ClipStudioDesktop
 {
-    public partial class App : Application
+    public partial class App : System.Windows.Application
     {
         private TaskbarIcon? _taskbarIcon;
         private ISettingsService _settingsService;
@@ -181,8 +182,6 @@ namespace ClipStudioDesktop
             _taskbarIcon?.Dispose();
             (_hotKeyService as IDisposable)?.Dispose();
             _recordingService?.Dispose();
-            base.OnExit(e);
-        }
             base.OnExit(e);
         }
     }
