@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Interop;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Hotkeys
 {
     public class HotKeyService : IHotKeyService, IDisposable
     {

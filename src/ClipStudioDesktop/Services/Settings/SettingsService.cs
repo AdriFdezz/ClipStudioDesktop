@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Settings
 {
     public class SettingsService : ISettingsService
     {

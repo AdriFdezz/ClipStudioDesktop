@@ -1,6 +1,8 @@
 using ClipStudioDesktop.Helpers;
 using ClipStudioDesktop.Models;
-using ClipStudioDesktop.Services;
+using ClipStudioDesktop.Services.Settings;
+using ClipStudioDesktop.Services.Storage;
+using ClipStudioDesktop.Services.Recording;
 using System;
 using System.Diagnostics;
 using System.IO;

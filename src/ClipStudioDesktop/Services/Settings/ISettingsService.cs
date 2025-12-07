@@ -1,6 +1,6 @@
 using ClipStudioDesktop.Models;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Settings
 {
     public interface ISettingsService
     {

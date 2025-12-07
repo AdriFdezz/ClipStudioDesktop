@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Recording
 {
     public interface IRecordingService
     {

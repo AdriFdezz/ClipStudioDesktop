@@ -1,9 +1,11 @@
 using ClipStudioDesktop.Services.Audio;
 using ClipStudioDesktop.Services.Video;
+using ClipStudioDesktop.Services.Settings;
+using ClipStudioDesktop.Services.Storage;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Recording
 {
     public class RecordingService : IRecordingService
     {

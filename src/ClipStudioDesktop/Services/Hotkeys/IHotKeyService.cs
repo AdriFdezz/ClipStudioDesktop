@@ -1,6 +1,6 @@
 using System;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Hotkeys
 {
     public interface IHotKeyService
     {

@@ -1,7 +1,8 @@
 using ClipStudioDesktop.Models;
+using ClipStudioDesktop.Services.Settings;
 using System.IO;
 
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Storage
 {
     public class StorageService : IStorageService
     {

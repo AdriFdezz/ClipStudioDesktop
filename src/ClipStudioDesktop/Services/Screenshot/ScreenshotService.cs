@@ -1,4 +1,6 @@
 using ClipStudioDesktop.Views;
+using ClipStudioDesktop.Services.Storage;
+using ClipStudioDesktop.Services.Settings;
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;

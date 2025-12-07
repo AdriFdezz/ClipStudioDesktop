@@ -1,4 +1,4 @@
-namespace ClipStudioDesktop.Services
+namespace ClipStudioDesktop.Services.Storage
 {
     public interface IStorageService
     {

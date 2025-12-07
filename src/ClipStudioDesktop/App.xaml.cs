@@ -3,6 +3,10 @@ using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using System.Drawing;
 using ClipStudioDesktop.Services.Screenshot;
+using ClipStudioDesktop.Services.Storage;
+using ClipStudioDesktop.Services.Hotkeys;
+using ClipStudioDesktop.Services.Settings;
+using ClipStudioDesktop.Services.Recording;
 using ClipStudioDesktop.ViewModels;
 
 namespace ClipStudioDesktop
