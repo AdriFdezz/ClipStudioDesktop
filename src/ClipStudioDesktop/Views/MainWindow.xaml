@@ -4,49 +4,88 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Clip Studio Desktop - Configuración" Height="600" Width="800"
+        Title="Clip Studio Desktop" Height="650" Width="900"
         ResizeMode="CanMinimize"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BackgroundBrush}">
     
-    <Grid Margin="20">
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/> <!-- Header -->
+            <RowDefinition Height="*"/>    <!-- Content -->
+            <RowDefinition Height="Auto"/> <!-- Footer -->
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Clip Studio Desktop" FontSize="24" FontWeight="Bold" Margin="0,0,0,20"/>
-
-        <TabControl Grid.Row="1">
-            <!-- General Tab -->
-            <TabItem Header="General">
-                <StackPanel Margin="10">
-                    <GroupBox Header="Opciones de Inicio">
-                        <StackPanel Margin="5">
-                            <CheckBox Content="Iniciar con Windows" IsChecked="{Binding Settings.General.StartWithWindows}" Margin="0,5"/>
-                            <CheckBox Content="Mostrar notificaciones" IsChecked="{Binding Settings.General.ShowNotifications}" Margin="0,5"/>
-                            <CheckBox Content="Reproducir sonido al guardar" IsChecked="{Binding Settings.General.PlaySoundOnClip}" Margin="0,5"/>
-                        </StackPanel>
-                    </GroupBox>
-
-                    <GroupBox Header="Carpetas" Margin="0,10,0,0">
-                        <StackPanel Margin="5">
-                            <Button Content="Abrir carpeta de Audio" Command="{Binding OpenAudioFolderCommand}" Margin="0,5" HorizontalAlignment="Left" Width="200"/>
-                            <Button Content="Abrir carpeta de Video" Command="{Binding OpenVideoFolderCommand}" Margin="0,5" HorizontalAlignment="Left" Width="200"/>
-                            <Button Content="Abrir carpeta de Imágenes" Command="{Binding OpenImagesFolderCommand}" Margin="0,5" HorizontalAlignment="Left" Width="200"/>
-                        </StackPanel>
-                    </GroupBox>
+        <!-- Header -->
+        <Border Background="{StaticResource SurfaceBrush}" Padding="20" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <!-- Placeholder for Logo if needed -->
+                    <TextBlock Text="Clip Studio Desktop" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
+                    <TextBlock Text="Configuración" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextSecondaryBrush}" Margin="10,0,0,0"/>
                 </StackPanel>
+                <TextBlock Grid.Column="1" Text="v1.0.0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+            </Grid>
+        </Border>
+
+        <!-- Main Content -->
+        <TabControl Grid.Row="1" Margin="20" Background="Transparent" BorderThickness="0">
+            <!-- General Tab -->
+            <TabItem Header="GENERAL">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
+                        <GroupBox Header="Opciones de Inicio">
+                            <StackPanel Margin="5">
+                                <CheckBox Content="Iniciar con Windows" IsChecked="{Binding Settings.General.StartWithWindows}" Margin="0,8"/>
+                                <CheckBox Content="Mostrar notificaciones" IsChecked="{Binding Settings.General.ShowNotifications}" Margin="0,8"/>
+                                <CheckBox Content="Reproducir sonido al guardar" IsChecked="{Binding Settings.General.PlaySoundOnClip}" Margin="0,8"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Carpetas de Almacenamiento">
+                            <StackPanel Margin="5">
+                                <Grid Margin="0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Carpeta de Audio" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <Button Grid.Column="1" Content="Abrir Carpeta" Command="{Binding OpenAudioFolderCommand}" Width="120" Margin="10,0,0,0"/>
+                                </Grid>
+                                <Grid Margin="0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Carpeta de Video" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <Button Grid.Column="1" Content="Abrir Carpeta" Command="{Binding OpenVideoFolderCommand}" Width="120" Margin="10,0,0,0"/>
+                                </Grid>
+                                <Grid Margin="0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Carpeta de Imágenes" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <Button Grid.Column="1" Content="Abrir Carpeta" Command="{Binding OpenImagesFolderCommand}" Width="120" Margin="10,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- Audio/Video Tab -->
-            <TabItem Header="Audio y Video">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
+            <TabItem Header="AUDIO Y VIDEO">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
                         <GroupBox Header="Configuración de Audio">
                             <Grid Margin="5">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -54,21 +93,21 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Text="Formato:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBlock Text="Formato" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Audio.Format}" SelectedValuePath="Content" Margin="0,5">
                                     <ComboBoxItem Content="mp3"/>
                                     <ComboBoxItem Content="wav"/>
                                 </ComboBox>
 
-                                <TextBlock Grid.Row="1" Text="Bitrate (kbps):" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBlock Grid.Row="1" Text="Bitrate (kbps)" VerticalAlignment="Center" Margin="0,10"/>
                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Audio.Bitrate}" Margin="0,5"/>
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Configuración de Video" Margin="0,10,0,0">
+                        <GroupBox Header="Configuración de Video">
                             <Grid Margin="5">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
@@ -77,27 +116,27 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Text="Formato:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBlock Text="Formato" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Video.Format}" SelectedValuePath="Content" Margin="0,5">
                                     <ComboBoxItem Content="mp4"/>
                                     <ComboBoxItem Content="mkv"/>
                                 </ComboBox>
 
-                                <TextBlock Grid.Row="1" Text="FPS:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBlock Grid.Row="1" Text="FPS" VerticalAlignment="Center" Margin="0,10"/>
                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Video.Framerate}" Margin="0,5"/>
 
-                                <TextBlock Grid.Row="2" Text="Bitrate (kbps):" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBlock Grid.Row="2" Text="Bitrate (kbps)" VerticalAlignment="Center" Margin="0,10"/>
                                 <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.Video.Bitrate}" Margin="0,5"/>
                             </Grid>
                         </GroupBox>
                         
-                        <GroupBox Header="Buffer" Margin="0,10,0,0">
+                        <GroupBox Header="Buffer de Grabación">
                              <Grid Margin="5">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="200"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Duración máxima (segundos):" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                                <TextBlock Text="Duración máxima (segundos)" VerticalAlignment="Center" Margin="0,10"/>
                                 <TextBox Grid.Column="1" Text="{Binding Settings.Buffer.MaxDurationSeconds}" Margin="0,5"/>
                              </Grid>
                         </GroupBox>
@@ -106,79 +145,88 @@
             </TabItem>
 
             <!-- Hotkeys Tab -->
-            <TabItem Header="Atajos de Teclado">
-                <DataGrid ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" Margin="10" CanUserAddRows="False">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Tecla" Binding="{Binding Key}" Width="*"/>
-                        <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="100" IsReadOnly="True"/>
-                        <DataGridTextColumn Header="Duración (s)" Binding="{Binding Duration}" Width="100"/>
-                        <DataGridTextColumn Header="Modo" Binding="{Binding Mode}" Width="100"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+            <TabItem Header="ATAJOS">
+                <Grid Margin="0,20,0,0">
+                    <DataGrid ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" CanUserAddRows="False" BorderThickness="1" BorderBrush="{StaticResource BorderBrush}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Tecla" Binding="{Binding Key}" Width="*"/>
+                            <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="120" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Duración (s)" Binding="{Binding Duration}" Width="100"/>
+                            <DataGridTextColumn Header="Modo" Binding="{Binding Mode}" Width="100"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
             </TabItem>
+
             <!-- Status Tab -->
-            <TabItem Header="Estado del Sistema">
-                <StackPanel Margin="10">
-                    <GroupBox Header="Estado Actual">
-                        <StackPanel Margin="5">
-                            <Grid Margin="0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Estado de Grabación:" FontWeight="Bold"/>
-                                <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="Green" FontWeight="Bold"/>
-                            </Grid>
-                            
-                            <Grid Margin="0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Uso de Memoria:" FontWeight="Bold"/>
-                                <TextBlock Grid.Column="1" Text="{Binding MemoryUsageText}"/>
-                            </Grid>
+            <TabItem Header="ESTADO">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
+                        <GroupBox Header="Estado del Sistema">
+                            <StackPanel Margin="5">
+                                <Grid Margin="0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Estado de Grabación" FontWeight="SemiBold"/>
+                                    <Border Grid.Column="1" Background="#102E10" CornerRadius="4" HorizontalAlignment="Left" Padding="10,2">
+                                        <TextBlock Text="{Binding StatusText}" Foreground="#4CAF50" FontWeight="Bold"/>
+                                    </Border>
+                                </Grid>
+                                
+                                <Grid Margin="0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Uso de Memoria" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding MemoryUsageText}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Grid>
 
-                            <Grid Margin="0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Tamaño Buffer (Disco):" FontWeight="Bold"/>
-                                <TextBlock Grid.Column="1" Text="{Binding BufferSizeText}"/>
-                            </Grid>
-                        </StackPanel>
-                    </GroupBox>
+                                <Grid Margin="0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Tamaño Buffer (Disco)" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding BufferSizeText}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
 
-                    <GroupBox Header="Estadísticas de Hoy" Margin="0,10,0,0">
-                        <StackPanel Margin="5">
-                            <Grid Margin="0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Clips Guardados:" FontWeight="Bold"/>
-                                <TextBlock Grid.Column="1" Text="{Binding ClipsTodayText}"/>
-                            </Grid>
+                        <GroupBox Header="Estadísticas de Hoy">
+                            <StackPanel Margin="5">
+                                <Grid Margin="0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Clips Guardados" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding ClipsTodayText}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Grid>
 
-                            <Grid Margin="0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Espacio Usado:" FontWeight="Bold"/>
-                                <TextBlock Grid.Column="1" Text="{Binding SpaceUsedText}"/>
-                            </Grid>
-                        </StackPanel>
-                    </GroupBox>
-                </StackPanel>
+                                <Grid Margin="0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Espacio Usado" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding SpaceUsedText}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 
-        <!-- Action Buttons -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Margin="0,0,10,0" Padding="10,5"/>
-            <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Padding="10,5"/>
-        </StackPanel>
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" Padding="20" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Background="Transparent" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,10,0"/>
+                <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Width="180"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

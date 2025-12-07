@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -30,6 +31,25 @@ namespace ClipStudioDesktop
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Global exception handling
+            this.DispatcherUnhandledException += (s, args) =>
+            {
+                System.Windows.MessageBox.Show($"An unhandled exception occurred: {args.Exception.Message}\n\nStack Trace:\n{args.Exception.StackTrace}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                args.Handled = true;
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, args) =>
+            {
+                System.Windows.MessageBox.Show($"An unobserved task exception occurred: {args.Exception.Message}\n\nStack Trace:\n{args.Exception.StackTrace}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                args.SetObserved();
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+            {
+                var exception = args.ExceptionObject as Exception;
+                System.Windows.MessageBox.Show($"A critical unhandled exception occurred: {exception?.Message}\n\nStack Trace:\n{exception?.StackTrace}", "Critical Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            };
 
             // Initialize Services
             _settingsService = new SettingsService();

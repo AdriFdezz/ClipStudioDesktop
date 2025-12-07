@@ -58,8 +58,21 @@ namespace ClipStudioDesktop.Services.Video
             int segmentWrap = (int)(totalDurationSeconds / segmentTime);
 
             // Command to record desktop
-            // -b:v: Set video bitrate
-            string arguments = $"-y -f gdigrab -framerate {_settings.Video.Framerate} -i desktop -c:v libx264 -preset ultrafast -b:v {bitrateKbps}k -f segment -segment_time {segmentTime} -segment_wrap {segmentWrap} -reset_timestamps 1 \"{outputFilePattern}\"";
+            // Optimization:
+            // 1. Use ddagrab (Desktop Duplication) for GPU capture (much lower CPU usage)
+            // 2. -rtbufsize 100M: Limit memory buffer
+            // 3. -preset ultrafast: Minimal CPU usage for compression
+            // 4. -tune zerolatency: Optimize for real-time
+            
+            // Using ddagrab instead of gdigrab for performance
+            
+            string arguments = $"-y -f ddagrab -framerate {_settings.Video.Framerate} -draw_mouse 1 -i desktop " +
+                             $"-c:v libx264 -preset ultrafast -tune zerolatency " +
+                             $"-b:v {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bitrateKbps * 2}k " +
+                             $"-pix_fmt yuv420p " + 
+                             $"-rtbufsize 100M " + 
+                             $"-f segment -segment_time {segmentTime} -segment_wrap {segmentWrap} -reset_timestamps 1 " +
+                             $"\"{outputFilePattern}\"";
 
             var startInfo = new ProcessStartInfo
             {

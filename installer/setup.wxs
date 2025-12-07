@@ -16,8 +16,19 @@
 
         <!-- Interfaz Gráfica "Siguiente, Siguiente" -->
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-        <UIRef Id="WixUI_InstallDir" />
+        <!-- Checkbox para iniciar la app al finalizar -->
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Iniciar Clip Studio Desktop" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+        <UI>
+            <UIRef Id="WixUI_InstallDir" />
+            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+        </UI>
+        
         <WixVariable Id="WixUILicenseRtf" Value="installer\License.rtf" />
+
+        <!-- Custom Action para iniciar la app -->
+        <CustomAction Id="LaunchApplication" FileKey="ClipStudioDesktopEXE" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
 
         <!-- Feature Principal -->
         <Feature Id="ProductFeature" Title="Clip Studio Desktop" Level="1">
@@ -73,7 +84,7 @@
         <!-- Archivos a Instalar -->
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
             <Component Id="ProductComponent" Guid="6B078901-2345-6789-ABCD-EF0123456789">
-                <File Source="$(var.PublishDir)\ClipStudioDesktop.exe" KeyPath="yes" Checksum="yes"/>
+                <File Id="ClipStudioDesktopEXE" Source="$(var.PublishDir)\ClipStudioDesktop.exe" KeyPath="yes" Checksum="yes"/>
             </Component>
             <Component Id="FFmpegComponent" Guid="7C189012-3456-7890-BCDE-F01234567890">
                 <File Source="$(var.PublishDir)\ffmpeg.exe" KeyPath="yes" Checksum="yes"/>
