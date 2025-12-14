@@ -33,6 +33,10 @@ namespace ClipStudioDesktop.Services.Settings
                     if (settings != null)
                     {
                         CurrentSettings = settings;
+                        
+                        // Ensure new hotkeys exist if updating from old version
+                        EnsureHotkeys(CurrentSettings);
+                        
                         return;
                     }
                 }
@@ -44,6 +48,23 @@ namespace ClipStudioDesktop.Services.Settings
 
             // If file doesn't exist or failed to load, use defaults and save
             ResetToDefaults();
+        }
+
+        private void EnsureHotkeys(AppSettings settings)
+        {
+            bool changed = false;
+            
+            // Check for Alt+V (Clipboard Selection)
+            if (!settings.Hotkeys.Exists(h => h.Type == "screenshot" && h.Mode == "selection_clipboard"))
+            {
+                settings.Hotkeys.Add(new HotKeyConfig { Key = "Alt+V", Type = "screenshot", Mode = "selection_clipboard" });
+                changed = true;
+            }
+
+            if (changed)
+            {
+                SaveSettings();
+            }
         }
 
         public void SaveSettings()
@@ -80,7 +101,8 @@ namespace ClipStudioDesktop.Services.Settings
                 new() { Key = "Alt+5", Type = "video", Duration = 300 },
                 
                 new() { Key = "Alt+X", Type = "screenshot", Mode = "selection" },
-                new() { Key = "Alt+C", Type = "screenshot", Mode = "fullscreen" }
+                new() { Key = "Alt+C", Type = "screenshot", Mode = "fullscreen" },
+                new() { Key = "Alt+V", Type = "screenshot", Mode = "selection_clipboard" }
             };
 
             SaveSettings();

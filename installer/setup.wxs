@@ -11,8 +11,8 @@
         <MediaTemplate EmbedCab="yes" />
 
         <!-- Icono para el Panel de Control (Agregar/Quitar programas) -->
-        <Icon Id="icon.ico" SourceFile="$(var.PublishDir)\ClipStudioDesktop.exe"/>
-        <Property Id="ARPPRODUCTICON" Value="icon.ico" />
+        <Icon Id="AppIcon.exe" SourceFile="$(var.PublishDir)\ClipStudioDesktop.exe"/>
+        <Property Id="ARPPRODUCTICON" Value="AppIcon.exe" />
 
         <!-- Interfaz Gráfica "Siguiente, Siguiente" -->
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
@@ -42,7 +42,9 @@
         <!-- Estructura de Directorios -->
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFiles64Folder">
-                <Directory Id="INSTALLFOLDER" Name="Clip Studio Desktop" />
+                <Directory Id="INSTALLFOLDER" Name="Clip Studio Desktop">
+                    <Directory Id="AssetsFolder" Name="assets" />
+                </Directory>
             </Directory>
             <Directory Id="ProgramMenuFolder">
                 <Directory Id="ApplicationProgramsFolder" Name="Clip Studio Desktop"/>
@@ -59,7 +61,7 @@
                           Description="Herramienta de grabación de escritorio"
                           Target="[INSTALLFOLDER]ClipStudioDesktop.exe"
                           WorkingDirectory="INSTALLFOLDER"
-                          Icon="icon.ico"/>
+                          Icon="AppIcon.exe"/>
                 <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
                 <RegistryValue Root="HKCU" Key="Software\AdriFdezz\ClipStudioDesktop" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
             </Component>
@@ -82,12 +84,18 @@
 
     <Fragment>
         <!-- Archivos a Instalar -->
-        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-            <Component Id="ProductComponent" Guid="6B078901-2345-6789-ABCD-EF0123456789">
+        <ComponentGroup Id="ProductComponents">
+            <Component Id="ProductComponent" Guid="6B078901-2345-6789-ABCD-EF0123456789" Directory="INSTALLFOLDER">
                 <File Id="ClipStudioDesktopEXE" Source="$(var.PublishDir)\ClipStudioDesktop.exe" KeyPath="yes" Checksum="yes"/>
             </Component>
-            <Component Id="FFmpegComponent" Guid="7C189012-3456-7890-BCDE-F01234567890">
+            <Component Id="FFmpegComponent" Guid="7C189012-3456-7890-BCDE-F01234567890" Directory="INSTALLFOLDER">
                 <File Source="$(var.PublishDir)\ffmpeg.exe" KeyPath="yes" Checksum="yes"/>
+            </Component>
+            <Component Id="NotificationSoundComponent" Guid="8D290123-4567-8901-BCDE-F01234567891" Directory="AssetsFolder">
+                <File Source="$(var.PublishDir)\assets\Notification_sound.wav" KeyPath="yes" />
+            </Component>
+            <Component Id="IconComponent" Guid="9E301234-5678-9012-CDEF-012345678902" Directory="AssetsFolder">
+                <File Source="$(var.PublishDir)\assets\Clip_Studio_Desktop_ico.ico" KeyPath="yes" />
             </Component>
         </ComponentGroup>
     </Fragment>

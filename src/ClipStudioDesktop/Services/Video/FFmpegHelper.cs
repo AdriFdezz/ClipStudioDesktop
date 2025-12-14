@@ -16,9 +16,16 @@ namespace ClipStudioDesktop.Services.Video
 
         public static string GetFFmpegPath()
         {
-            string localPath = Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg.exe");
+            // 1. Check in application directory
+            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe");
             if (File.Exists(localPath)) return localPath;
-            return "ffmpeg"; // Assume in PATH
+
+            // 2. Check in a 'tools' subdirectory
+            string toolsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "ffmpeg.exe");
+            if (File.Exists(toolsPath)) return toolsPath;
+
+            // 3. Assume in PATH
+            return "ffmpeg"; 
         }
     }
 }

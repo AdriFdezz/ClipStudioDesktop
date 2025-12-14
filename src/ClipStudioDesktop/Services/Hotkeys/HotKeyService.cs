@@ -33,11 +33,24 @@ namespace ClipStudioDesktop.Services.Hotkeys
                 throw new InvalidOperationException("HotKeyService not initialized with window handle.");
 
             var (modifiers, key) = ParseKeyCombination(keyCombination);
+            
+            if (key == Key.None)
+            {
+                System.Diagnostics.Debug.WriteLine($"Invalid hotkey combination: {keyCombination} (No key found)");
+                return;
+            }
+
             int id = _currentId++;
             
             if (RegisterHotKey(_windowHandle, id, (uint)modifiers, (uint)KeyInterop.VirtualKeyFromKey(key)))
             {
                 _callbacks.Add(id, action);
+            }
+            else
+            {
+                // Failed to register
+                int errorCode = Marshal.GetLastWin32Error();
+                throw new InvalidOperationException($"No se pudo registrar el atajo '{keyCombination}'. Código de error: {errorCode}. Es probable que otra aplicación ya lo esté usando.");
             }
         }
 
@@ -70,6 +83,12 @@ namespace ClipStudioDesktop.Services.Hotkeys
             foreach (var part in parts)
             {
                 string trimmed = part.Trim();
+                
+                // Handle aliases
+                if (trimmed.Equals("Ctrl", StringComparison.OrdinalIgnoreCase)) trimmed = "Control";
+                if (trimmed.Equals("Shift", StringComparison.OrdinalIgnoreCase)) trimmed = "Shift";
+                if (trimmed.Equals("Alt", StringComparison.OrdinalIgnoreCase)) trimmed = "Alt";
+                
                 if (Enum.TryParse(trimmed, true, out ModifierKeys mod))
                 {
                     modifiers |= mod;
@@ -88,6 +107,10 @@ namespace ClipStudioDesktop.Services.Hotkeys
                 }
             }
 
+            // If no modifiers found but "Ctrl" or "Alt" or "Shift" was in the string, it might have been parsed as Key.LeftCtrl etc.
+            // But we want ModifierKeys for RegisterHotKey.
+            // Actually, Enum.TryParse<ModifierKeys> handles "Control", "Alt", "Shift".
+            
             return (modifiers, key);
         }
 

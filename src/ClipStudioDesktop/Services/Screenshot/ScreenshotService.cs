@@ -28,7 +28,7 @@ namespace ClipStudioDesktop.Services.Screenshot
             try
             {
                 var settings = _settingsService.CurrentSettings.Screenshot;
-                int x, y, width, height;
+                int x = 0, y = 0, width = 0, height = 0;
 
                 if (settings.Monitor == "all")
                 {
@@ -52,20 +52,28 @@ namespace ClipStudioDesktop.Services.Screenshot
                     {
                         // Fallback to primary
                         var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                        if (screen != null)
+                        {
+                            x = screen.Bounds.X;
+                            y = screen.Bounds.Y;
+                            width = screen.Bounds.Width;
+                            height = screen.Bounds.Height;
+                        }
+                    }
+                }
+                else // "primary" or default
+                {
+                    var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                    if (screen != null)
+                    {
                         x = screen.Bounds.X;
                         y = screen.Bounds.Y;
                         width = screen.Bounds.Width;
                         height = screen.Bounds.Height;
                     }
                 }
-                else // "primary" or default
-                {
-                    var screen = System.Windows.Forms.Screen.PrimaryScreen;
-                    x = screen.Bounds.X;
-                    y = screen.Bounds.Y;
-                    width = screen.Bounds.Width;
-                    height = screen.Bounds.Height;
-                }
+
+                if (width == 0 || height == 0) return Task.CompletedTask;
 
                 using (Bitmap bitmap = new Bitmap(width, height))
                 {
@@ -88,8 +96,13 @@ namespace ClipStudioDesktop.Services.Screenshot
         [System.Runtime.InteropServices.DllImport("gdi32.dll")]
         public static extern bool DeleteObject(IntPtr hObject);
 
-        public async Task CaptureSelectionAsync()
+        public Task<bool> CaptureSelectionAsync() => PerformSelectionCaptureAsync(true);
+
+        public Task<bool> CaptureSelectionToClipboardAsync() => PerformSelectionCaptureAsync(false);
+
+        private async Task<bool> PerformSelectionCaptureAsync(bool saveToFile)
         {
+            bool success = false;
             try
             {
                 // 1. Capture full screen first to use as background
@@ -142,8 +155,16 @@ namespace ClipStudioDesktop.Services.Screenshot
                         var cropRect = new Rectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
                         using (Bitmap cropped = fullScreenBitmap.Clone(cropRect, fullScreenBitmap.PixelFormat))
                         {
-                            SaveScreenshot(cropped);
+                            if (saveToFile)
+                            {
+                                SaveScreenshot(cropped);
+                            }
+                            else
+                            {
+                                CopyToClipboard(cropped);
+                            }
                         }
+                        success = true;
                     }
                 });
 
@@ -152,6 +173,34 @@ namespace ClipStudioDesktop.Services.Screenshot
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error capturing selection: {ex.Message}");
+            }
+            return success;
+        }
+
+        private void CopyToClipboard(Bitmap bitmap)
+        {
+            try
+            {
+                IntPtr hBitmap = bitmap.GetHbitmap();
+                try
+                {
+                    var source = Imaging.CreateBitmapSourceFromHBitmap(
+                        hBitmap,
+                        IntPtr.Zero,
+                        Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
+                    
+                    System.Windows.Clipboard.SetImage(source);
+                    PlayShutterSound();
+                }
+                finally
+                {
+                    DeleteObject(hBitmap);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error copying to clipboard: {ex.Message}");
             }
         }
 
@@ -165,13 +214,29 @@ namespace ClipStudioDesktop.Services.Screenshot
 
             bitmap.Save(filePath, ImageFormat.Png);
 
-            if (_settingsService.CurrentSettings.General.ShowNotifications)
+            PlayShutterSound();
+        }
+
+        private void PlayShutterSound()
+        {
+            try
             {
-                // TODO: Better notification
-                System.Windows.Application.Current.Dispatcher.Invoke(() => 
-                    System.Windows.MessageBox.Show($"Captura guardada: {filePath}")
-                );
+                // Try to find a shutter sound in Windows Media folder
+                string winSound = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "Windows Camera Shutter.wav");
+                if (File.Exists(winSound))
+                {
+                    using (var player = new System.Media.SoundPlayer(winSound))
+                    {
+                        player.Play();
+                    }
+                }
+                else
+                {
+                    // Fallback - Do nothing to avoid annoying system beeps
+                    // System.Media.SystemSounds.Asterisk.Play();
+                }
             }
+            catch { }
         }
     }
 }

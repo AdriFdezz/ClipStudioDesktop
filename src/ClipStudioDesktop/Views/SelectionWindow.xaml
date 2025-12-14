@@ -9,18 +9,27 @@
         ResizeMode="NoResize" 
         ShowInTaskbar="False" 
         Topmost="True"
-        WindowState="Maximized"
+        WindowState="Normal"
         Background="Black"
         Cursor="Cross">
     <Grid>
         <!-- Background Image (The frozen screen) -->
         <Image x:Name="BackgroundImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
         
-        <!-- Dark Overlay -->
-        <Rectangle Fill="Black" Opacity="0.4"/>
+        <!-- Dark Overlay with Hole -->
+        <Path Fill="Black" Opacity="0.5" IsHitTestVisible="False">
+            <Path.Data>
+                <GeometryGroup FillRule="EvenOdd">
+                    <!-- Full screen coverage (using a large enough rect) -->
+                    <RectangleGeometry Rect="-10000,-10000,20000,20000" />
+                    <!-- The hole for selection -->
+                    <RectangleGeometry x:Name="HoleGeometry" />
+                </GeometryGroup>
+            </Path.Data>
+        </Path>
         
-        <!-- Selection Area (Clear part) -->
-        <Canvas x:Name="SelectionCanvas" MouseDown="Canvas_MouseDown" MouseMove="Canvas_MouseMove" MouseUp="Canvas_MouseUp">
+        <!-- Selection Area -->
+        <Canvas x:Name="SelectionCanvas" Background="Transparent" MouseDown="Canvas_MouseDown" MouseMove="Canvas_MouseMove" MouseUp="Canvas_MouseUp">
             <Path x:Name="SelectionPath" Stroke="White" StrokeThickness="1" StrokeDashArray="4 2">
                 <Path.Data>
                     <RectangleGeometry x:Name="SelectionGeometry" />

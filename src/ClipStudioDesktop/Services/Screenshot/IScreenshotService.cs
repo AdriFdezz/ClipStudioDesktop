@@ -5,6 +5,7 @@ namespace ClipStudioDesktop.Services.Screenshot
     public interface IScreenshotService
     {
         Task CaptureFullScreenAsync();
-        Task CaptureSelectionAsync();
+        Task<bool> CaptureSelectionAsync();
+        Task<bool> CaptureSelectionToClipboardAsync();
     }
 }

@@ -67,5 +67,14 @@ if (Test-Path $ffmpegPath) {
     Write-Host "WARNING: ffmpeg.exe still not found. The installer will be missing it." -ForegroundColor Red
 }
 
+# 5. Copy Assets to publish folder
+$assetsPath = "src/ClipStudioDesktop/assets"
+if (Test-Path $assetsPath) {
+    Write-Host "Copying assets to publish folder..." -ForegroundColor Yellow
+    $destAssets = ".\publish\assets"
+    if (-not (Test-Path $destAssets)) { New-Item -ItemType Directory -Path $destAssets | Out-Null }
+    Copy-Item "$assetsPath\*" $destAssets -Recurse -Force
+}
+
 Write-Host "Build complete!" -ForegroundColor Green
 Write-Host "Executable is located in: .\publish\ClipStudioDesktop.exe" -ForegroundColor Cyan

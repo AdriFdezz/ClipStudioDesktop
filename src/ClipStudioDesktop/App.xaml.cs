@@ -12,23 +12,24 @@ using ClipStudioDesktop.Services.Recording;
 using ClipStudioDesktop.ViewModels;
 
 using ClipStudioDesktop.Helpers;
+using NAudio.Wave;
 
 namespace ClipStudioDesktop
 {
     public partial class App : System.Windows.Application
     {
         private TaskbarIcon? _taskbarIcon;
-        private ISettingsService _settingsService;
-        private IHotKeyService _hotKeyService;
-        private IRecordingService _recordingService;
-        private IStorageService _storageService;
-        private IScreenshotService _screenshotService;
-        private MainViewModel _mainViewModel;
-        private Views.MainWindow _mainWindow;
+        private ISettingsService _settingsService = null!;
+        private IHotKeyService _hotKeyService = null!;
+        private IRecordingService _recordingService = null!;
+        private IStorageService _storageService = null!;
+        private IScreenshotService _screenshotService = null!;
+        private MainViewModel _mainViewModel = null!;
+        private Views.MainWindow _mainWindow = null!;
         // We need a window to attach hotkeys to, even if hidden
-        private Window _messageWindow;
+        private Window _messageWindow = null!;
 
-        protected override async void OnStartup(StartupEventArgs e)
+        protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
@@ -83,33 +84,56 @@ namespace ClipStudioDesktop
 
             RegisterConfiguredHotkeys();
 
-            // Start Recording
-            await _recordingService.StartRecordingAsync();
+            // Start Recording (Disabled by default)
+            // await _recordingService.StartRecordingAsync();
 
             // Create the TaskbarIcon
             _taskbarIcon = new TaskbarIcon();
             _taskbarIcon.ToolTipText = "Clip Studio Desktop";
             
-            // Use a default system icon since we don't have a custom one yet
-            _taskbarIcon.Icon = SystemIcons.Application;
+            // Load custom icon
+            try 
+            {
+                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "Clip_Studio_Desktop_ico.ico");
+                if (System.IO.File.Exists(iconPath))
+                {
+                    _taskbarIcon.Icon = new System.Drawing.Icon(iconPath);
+                }
+                else
+                {
+                    _taskbarIcon.Icon = SystemIcons.Application;
+                }
+            }
+            catch
+            {
+                _taskbarIcon.Icon = SystemIcons.Application;
+            }
 
             // Create Context Menu
             var contextMenu = new System.Windows.Controls.ContextMenu();
 
             // Pause/Resume
             var toggleItem = new System.Windows.Controls.MenuItem();
-            toggleItem.Header = "Pausar Grabación";
+            toggleItem.Header = _recordingService.IsRecording ? "Pausar Grabación" : "Iniciar Grabación";
+            
+            // Subscribe to state changes to keep menu in sync
+            _recordingService.RecordingStateChanged += (s, isRecording) => 
+            {
+                this.Dispatcher.Invoke(() => 
+                {
+                    toggleItem.Header = isRecording ? "Pausar Grabación" : "Iniciar Grabación";
+                });
+            };
+
             toggleItem.Click += async (s, args) => 
             {
                 if (_recordingService.IsRecording)
                 {
                     await _recordingService.StopRecordingAsync();
-                    toggleItem.Header = "Reanudar Grabación";
                 }
                 else
                 {
                     await _recordingService.StartRecordingAsync();
-                    toggleItem.Header = "Pausar Grabación";
                 }
             };
             contextMenu.Items.Add(toggleItem);
@@ -160,23 +184,70 @@ namespace ClipStudioDesktop
                 {
                     _hotKeyService.RegisterHotKey(hotkey.Key, async () => 
                     {
-                        if (hotkey.Type == "audio")
+                        // DEBUG: Uncomment to verify hotkey trigger
+                        // System.Windows.MessageBox.Show($"Atajo detectado: {hotkey.Key} ({hotkey.Type})");
+
+                        // Show processing window for clips
+                        Views.ProcessingWindow? processingWindow = null;
+                        if (hotkey.Type == "audio" || hotkey.Type == "video")
                         {
-                            await _recordingService.SaveClipAsync(hotkey.Duration, false);
-                        }
-                        else if (hotkey.Type == "video")
-                        {
-                            await _recordingService.SaveClipAsync(hotkey.Duration, true);
-                        }
-                        else if (hotkey.Type == "screenshot")
-                        {
-                            if (hotkey.Mode == "selection")
+                            if (!_recordingService.IsRecording)
                             {
-                                await _screenshotService.CaptureSelectionAsync();
+                                System.Windows.MessageBox.Show("La grabación no está activa. Actívela desde el menú de estado o la bandeja del sistema.", "Grabación Inactiva", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                return;
                             }
-                            else
+
+                            // Ensure UI thread
+                            System.Windows.Application.Current.Dispatcher.Invoke(() => 
                             {
-                                await _screenshotService.CaptureFullScreenAsync();
+                                processingWindow = new Views.ProcessingWindow();
+                                processingWindow.Show();
+                            });
+                        }
+
+                        try
+                        {
+                            if (hotkey.Type == "audio")
+                            {
+                                await _recordingService.SaveClipAsync(hotkey.Duration, false);
+                                PlayNotificationSound();
+                            }
+                            else if (hotkey.Type == "video")
+                            {
+                                await _recordingService.SaveClipAsync(hotkey.Duration, true);
+                                PlayNotificationSound();
+                            }
+                            else if (hotkey.Type == "screenshot")
+                            {
+                                bool success = true;
+                                if (hotkey.Mode == "selection")
+                                {
+                                    success = await _screenshotService.CaptureSelectionAsync();
+                                }
+                                else if (hotkey.Mode == "selection_clipboard")
+                                {
+                                    success = await _screenshotService.CaptureSelectionToClipboardAsync();
+                                }
+                                else
+                                {
+                                    await _screenshotService.CaptureFullScreenAsync();
+                                }
+                                
+                                if (success)
+                                {
+                                    PlayNotificationSound();
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Windows.MessageBox.Show($"Error al ejecutar atajo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                        finally
+                        {
+                            if (processingWindow != null)
+                            {
+                                System.Windows.Application.Current.Dispatcher.Invoke(() => processingWindow.Close());
                             }
                         }
                     });
@@ -184,7 +255,7 @@ namespace ClipStudioDesktop
                 catch (Exception ex)
                 {
                     // Log error registering hotkey
-                    System.Diagnostics.Debug.WriteLine($"Failed to register hotkey {hotkey.Key}: {ex.Message}");
+                    System.Windows.MessageBox.Show($"Error al registrar atajo {hotkey.Key}: {ex.Message}\nEs posible que otra aplicación lo esté usando.", "Error de Atajo", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
         }
@@ -195,6 +266,37 @@ namespace ClipStudioDesktop
             _mainWindow.Activate();
             if (_mainWindow.WindowState == WindowState.Minimized)
                 _mainWindow.WindowState = WindowState.Normal;
+        }
+
+        private void PlayNotificationSound()
+        {
+            if (_settingsService.CurrentSettings.General.PlaySoundOnClip)
+            {
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var soundPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "Notification_sound.wav");
+                        if (System.IO.File.Exists(soundPath))
+                        {
+                            using (var audioFile = new AudioFileReader(soundPath))
+                            using (var outputDevice = new WaveOutEvent())
+                            {
+                                outputDevice.Init(audioFile);
+                                outputDevice.Play();
+                                while (outputDevice.PlaybackState == PlaybackState.Playing)
+                                {
+                                    System.Threading.Thread.Sleep(100);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error playing sound: {ex.Message}");
+                    }
+                });
+            }
         }
 
         protected override void OnExit(ExitEventArgs e)

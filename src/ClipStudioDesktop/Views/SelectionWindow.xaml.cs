@@ -13,11 +13,20 @@ namespace ClipStudioDesktop.Views
         public Rect SelectedRegion { get; private set; }
         public bool IsConfirmed { get; private set; }
 
+        // Default constructor
+        public SelectionWindow()
+        {
+            InitializeComponent();
+        }
+
         public SelectionWindow(BitmapSource screenCapture)
         {
             InitializeComponent();
             BackgroundImage.Source = screenCapture;
             
+            // Ensure focus for key events
+            Loaded += (s, e) => Focus();
+
             // Handle Escape to cancel
             KeyDown += (s, e) => 
             {
@@ -31,11 +40,16 @@ namespace ClipStudioDesktop.Views
 
         private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
+            if (e.ChangedButton != MouseButton.Left) return;
+
             _isDragging = true;
             _startPoint = e.GetPosition(SelectionCanvas);
             
             // Reset selection
-            SelectionGeometry.Rect = new Rect(_startPoint, _startPoint);
+            var rect = new Rect(_startPoint, _startPoint);
+            SelectionGeometry.Rect = rect;
+            HoleGeometry.Rect = rect;
+            
             DimensionsBorder.Visibility = Visibility.Visible;
             UpdateDimensionsText(0, 0);
             UpdateDimensionsPosition(_startPoint);
@@ -54,6 +68,7 @@ namespace ClipStudioDesktop.Views
 
             var rect = new Rect(x, y, w, h);
             SelectionGeometry.Rect = rect;
+            HoleGeometry.Rect = rect;
             
             UpdateDimensionsText(w, h);
             UpdateDimensionsPosition(new System.Windows.Point(x, y));
@@ -61,6 +76,8 @@ namespace ClipStudioDesktop.Views
 
         private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
+            if (e.ChangedButton != MouseButton.Left) return;
+
             _isDragging = false;
             SelectedRegion = SelectionGeometry.Rect;
             

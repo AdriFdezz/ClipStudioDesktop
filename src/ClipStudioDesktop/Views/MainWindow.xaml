@@ -3,11 +3,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:ClipStudioDesktop.ViewModels"
+        xmlns:local="clr-namespace:ClipStudioDesktop.Views"
         mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel, IsDesignTimeCreatable=False}"
         Title="Clip Studio Desktop" Height="650" Width="900"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource BackgroundBrush}">
+        Icon="pack://application:,,,/assets/Clip_Studio_Desktop_ico.ico"
+        Background="{StaticResource BackgroundBrush}"
+        Deactivated="Window_Deactivated">
     
     <Grid>
         <Grid.RowDefinitions>
@@ -94,13 +99,19 @@
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Text="Formato" VerticalAlignment="Center" Margin="0,10"/>
-                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Audio.Format}" SelectedValuePath="Content" Margin="0,5">
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Audio.Format}" SelectedValuePath="Content" Margin="0,5"
+                                          ToolTip="Formato de archivo de audio (mp3, wav).">
                                     <ComboBoxItem Content="mp3"/>
                                     <ComboBoxItem Content="wav"/>
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="1" Text="Bitrate (kbps)" VerticalAlignment="Center" Margin="0,10"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Audio.Bitrate}" Margin="0,5"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" SelectedValue="{Binding Settings.Audio.Bitrate}" SelectedValuePath="Tag" Margin="0,5"
+                                          ToolTip="Calidad de audio en kbps. 192 es calidad estándar alta.">
+                                    <ComboBoxItem Content="128 kbps (Estándar)" Tag="128"/>
+                                    <ComboBoxItem Content="192 kbps (Alta)" Tag="192"/>
+                                    <ComboBoxItem Content="320 kbps (Máxima)" Tag="320"/>
+                                </ComboBox>
                             </Grid>
                         </GroupBox>
 
@@ -117,16 +128,26 @@
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Text="Formato" VerticalAlignment="Center" Margin="0,10"/>
-                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Video.Format}" SelectedValuePath="Content" Margin="0,5">
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Video.Format}" SelectedValuePath="Content" Margin="0,5"
+                                          ToolTip="Formato de archivo de video (mp4, mkv).">
                                     <ComboBoxItem Content="mp4"/>
                                     <ComboBoxItem Content="mkv"/>
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="1" Text="FPS" VerticalAlignment="Center" Margin="0,10"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Video.Framerate}" Margin="0,5"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" SelectedValue="{Binding Settings.Video.Framerate}" SelectedValuePath="Tag" Margin="0,5"
+                                          ToolTip="Cuadros por segundo. 60 para fluidez, 30 para menor tamaño.">
+                                    <ComboBoxItem Content="30" Tag="30"/>
+                                    <ComboBoxItem Content="60" Tag="60"/>
+                                </ComboBox>
 
                                 <TextBlock Grid.Row="2" Text="Bitrate (kbps)" VerticalAlignment="Center" Margin="0,10"/>
-                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.Video.Bitrate}" Margin="0,5"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1" SelectedValue="{Binding Settings.Video.Bitrate}" SelectedValuePath="Tag" Margin="0,5"
+                                          ToolTip="Calidad de video en kbps. 8000 es buena calidad para 1080p.">
+                                    <ComboBoxItem Content="4000 kbps (Baja - 720p)" Tag="4000"/>
+                                    <ComboBoxItem Content="8000 kbps (Media - 1080p)" Tag="8000"/>
+                                    <ComboBoxItem Content="15000 kbps (Alta - 1080p60)" Tag="15000"/>
+                                </ComboBox>
                             </Grid>
                         </GroupBox>
                         
@@ -137,7 +158,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Duración máxima (segundos)" VerticalAlignment="Center" Margin="0,10"/>
-                                <TextBox Grid.Column="1" Text="{Binding Settings.Buffer.MaxDurationSeconds}" Margin="0,5"/>
+                                <TextBox Grid.Column="1" Text="{Binding Settings.Buffer.MaxDurationSeconds}" Margin="0,5"
+                                         ToolTip="Tiempo máximo de grabación que se mantiene en el buffer de disco (Audio y Video)."/>
                              </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -147,9 +169,26 @@
             <!-- Hotkeys Tab -->
             <TabItem Header="ATAJOS">
                 <Grid Margin="0,20,0,0">
-                    <DataGrid ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" CanUserAddRows="False" BorderThickness="1" BorderBrush="{StaticResource BorderBrush}">
+                    <DataGrid x:Name="HotkeysGrid" ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" CanUserAddRows="False" BorderThickness="1" BorderBrush="{StaticResource BorderBrush}">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Tecla" Binding="{Binding Key}" Width="*"/>
+                            <DataGridTemplateColumn Header="Tecla" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Key}" VerticalAlignment="Center" Padding="5,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Key}" 
+                                                 PreviewKeyDown="HotkeyTextBox_PreviewKeyDown"
+                                                 GotFocus="HotkeyTextBox_GotFocus"
+                                                 LostFocus="HotkeyTextBox_LostFocus"
+                                                 IsReadOnly="True" 
+                                                 Cursor="Hand"
+                                                 ToolTip="Presiona la combinación de teclas deseada"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="120" IsReadOnly="True"/>
                             <DataGridTextColumn Header="Duración (s)" Binding="{Binding Duration}" Width="100"/>
                             <DataGridTextColumn Header="Modo" Binding="{Binding Mode}" Width="100"/>
@@ -170,20 +209,14 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Estado de Grabación" FontWeight="SemiBold"/>
-                                    <Border Grid.Column="1" Background="#102E10" CornerRadius="4" HorizontalAlignment="Left" Padding="10,2">
-                                        <TextBlock Text="{Binding StatusText}" Foreground="#4CAF50" FontWeight="Bold"/>
-                                    </Border>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Border Background="#102E10" CornerRadius="4" HorizontalAlignment="Left" Padding="10,2" Margin="0,0,10,0">
+                                            <TextBlock Text="{Binding StatusText}" Foreground="#4CAF50" FontWeight="Bold"/>
+                                        </Border>
+                                        <Button Content="{Binding RecordingButtonText}" Command="{Binding ToggleRecordingCommand}" Padding="10,2"/>
+                                    </StackPanel>
                                 </Grid>
                                 
-                                <Grid Margin="0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Uso de Memoria" FontWeight="SemiBold"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding MemoryUsageText}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                </Grid>
-
                                 <Grid Margin="0,8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="200"/>

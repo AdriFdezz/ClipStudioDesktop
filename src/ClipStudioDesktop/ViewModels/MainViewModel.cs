@@ -4,6 +4,7 @@ using ClipStudioDesktop.Services.Settings;
 using ClipStudioDesktop.Services.Storage;
 using ClipStudioDesktop.Services.Recording;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -18,17 +19,18 @@ namespace ClipStudioDesktop.ViewModels
         private readonly IStorageService _storageService;
         private readonly IRecordingService _recordingService;
         private readonly System.Windows.Threading.DispatcherTimer _timer;
-
+        
         public AppSettings Settings => _settingsService.CurrentSettings;
 
         public string StatusText => _recordingService.IsRecording ? "Grabando (Activo)" : "Pausado";
-        public string MemoryUsageText { get; private set; } = "Calculando...";
+        public string RecordingButtonText => _recordingService.IsRecording ? "Desactivar Grabación" : "Activar Grabación";
         public string BufferSizeText { get; private set; } = "Calculando...";
         public string ClipsTodayText { get; private set; } = "0";
         public string SpaceUsedText { get; private set; } = "Calculando...";
 
         public ICommand SaveCommand { get; }
         public ICommand ResetCommand { get; }
+        public ICommand ToggleRecordingCommand { get; }
         public ICommand OpenAudioFolderCommand { get; }
         public ICommand OpenVideoFolderCommand { get; }
         public ICommand OpenImagesFolderCommand { get; }
@@ -41,6 +43,7 @@ namespace ClipStudioDesktop.ViewModels
 
             SaveCommand = new RelayCommand(_ => SaveSettings());
             ResetCommand = new RelayCommand(_ => ResetSettings());
+            ToggleRecordingCommand = new RelayCommand(async _ => await ToggleRecording());
             OpenAudioFolderCommand = new RelayCommand(_ => OpenFolder(_storageService.GetAudioFolder()));
             OpenVideoFolderCommand = new RelayCommand(_ => OpenFolder(_storageService.GetVideoFolder()));
             OpenImagesFolderCommand = new RelayCommand(_ => OpenFolder(_storageService.GetImageFolder()));
@@ -55,12 +58,7 @@ namespace ClipStudioDesktop.ViewModels
         private void UpdateStats(object? sender, EventArgs e)
         {
             OnPropertyChanged(nameof(StatusText));
-            
-            using (var proc = Process.GetCurrentProcess())
-            {
-                MemoryUsageText = $"{proc.PrivateMemorySize64 / 1024 / 1024} MB";
-            }
-            OnPropertyChanged(nameof(MemoryUsageText));
+            OnPropertyChanged(nameof(RecordingButtonText));
 
             try
             {
@@ -102,12 +100,40 @@ namespace ClipStudioDesktop.ViewModels
             var today = DateTime.Today;
             return new DirectoryInfo(path).GetFiles().Where(f => f.CreationTime.Date == today).ToArray();
         }
+        private async System.Threading.Tasks.Task ToggleRecording()
+        {
+            if (_recordingService.IsRecording)
+            {
+                await _recordingService.StopRecordingAsync();
+            }
+            else
+            {
+                await _recordingService.StartRecordingAsync();
+            }
+            OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(RecordingButtonText));
+        }
 
         private void SaveSettings()
         {
             _settingsService.SaveSettings();
             StartupHelper.SetStartup(_settingsService.CurrentSettings.General.StartWithWindows);
-            System.Windows.MessageBox.Show("Configuración guardada correctamente.", "Clip Studio Desktop", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            
+            var result = System.Windows.MessageBox.Show(
+                "Configuración guardada. Para aplicar los cambios es necesario reiniciar la aplicación.\n¿Desea reiniciar ahora?", 
+                "Reiniciar Aplicación", 
+                System.Windows.MessageBoxButton.YesNo, 
+                System.Windows.MessageBoxImage.Question);
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                var fileName = Process.GetCurrentProcess().MainModule?.FileName;
+                if (fileName != null)
+                {
+                    Process.Start(fileName);
+                    System.Windows.Application.Current.Shutdown();
+                }
+            }
         }
 
         private void ResetSettings()

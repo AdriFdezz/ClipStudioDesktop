@@ -15,6 +15,8 @@ namespace ClipStudioDesktop.Services.Video
         private Process? _ffmpegProcess;
         private bool _isRecording;
         private readonly string _bufferFolder;
+        private Task? _cleanupTask;
+        private System.Threading.CancellationTokenSource? _cleanupCts;
 
         public VideoRecorder(AppSettings settings)
         {
@@ -22,56 +24,113 @@ namespace ClipStudioDesktop.Services.Video
             _bufferFolder = Path.Combine(_settings.Paths.TempBuffer, "video");
         }
 
-        public async Task StartAsync()
+        public bool IsRunning => _ffmpegProcess != null && !_ffmpegProcess.HasExited;
+
+        public async Task<bool> StartAsync()
         {
-            if (_isRecording) return;
+            if (_isRecording) return true;
 
             await FFmpegHelper.EnsureFFmpegInstalledAsync();
 
             Directory.CreateDirectory(_bufferFolder);
             
             // Clean up previous buffer files
+            foreach (var file in Directory.GetFiles(_bufferFolder, "video_*.ts"))
+            {
+                try { File.Delete(file); } catch { }
+            }
             foreach (var file in Directory.GetFiles(_bufferFolder, "video_*.mp4"))
             {
                 try { File.Delete(file); } catch { }
             }
 
             string ffmpegPath = FFmpegHelper.GetFFmpegPath();
-            string outputFilePattern = Path.Combine(_bufferFolder, "video_%03d.mp4");
+            // Use MPEG-TS for buffer to avoid corruption and allow easy concatenation
+            // Use strftime to generate unique timestamps
+            string outputFilePattern = Path.Combine(_bufferFolder, "video_%Y-%m-%d_%H-%M-%S.ts");
 
-            // Calculate segment wrap based on 1GB reserved space (or configured size)
-            // Size (MB) = (Bitrate (kbps) * Duration (s)) / (8 * 1024)
-            // Duration = (Size * 8 * 1024) / Bitrate
-            // Segments = Duration / SegmentTime
-            
-            int segmentTime = 10;
+            int segmentTime = 5; // Smaller segments for better granularity
             int bitrateKbps = _settings.Video.Bitrate;
-            int targetSizeMB = _settings.Buffer.VideoBufferSizeMB;
             
-            // Calculate total duration to fill target size
-            // Use long to avoid overflow
-            long totalDurationSeconds = ((long)targetSizeMB * 8 * 1024) / bitrateKbps;
+            // Try ddagrab first (GPU accelerated capture)
+            bool success = await StartFFmpegProcess(ffmpegPath, "ddagrab", outputFilePattern, segmentTime, bitrateKbps, true);
             
-            // Ensure minimum duration (e.g. 300s)
-            if (totalDurationSeconds < 300) totalDurationSeconds = 300;
+            if (!success)
+            {
+                System.Diagnostics.Debug.WriteLine("Hardware encoding failed, falling back to software encoding");
+                success = await StartFFmpegProcess(ffmpegPath, "ddagrab", outputFilePattern, segmentTime, bitrateKbps, false);
+            }
 
-            int segmentWrap = (int)(totalDurationSeconds / segmentTime);
+            if (!success)
+            {
+                System.Diagnostics.Debug.WriteLine("ddagrab failed, falling back to gdigrab");
+                success = await StartFFmpegProcess(ffmpegPath, "gdigrab", outputFilePattern, segmentTime, bitrateKbps, false);
+            }
 
-            // Command to record desktop
-            // Optimization:
-            // 1. Use ddagrab (Desktop Duplication) for GPU capture (much lower CPU usage)
-            // 2. -rtbufsize 100M: Limit memory buffer
-            // 3. -preset ultrafast: Minimal CPU usage for compression
-            // 4. -tune zerolatency: Optimize for real-time
+            if (success)
+            {
+                _isRecording = true;
+                _cleanupCts = new System.Threading.CancellationTokenSource();
+                _cleanupTask = StartBufferCleanup(_cleanupCts.Token);
+            }
             
-            // Using ddagrab instead of gdigrab for performance
+            return success;
+        }
+
+        private async Task StartBufferCleanup(System.Threading.CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(5000, token); // Check every 5s
+                    CleanupOldBufferFiles();
+                }
+                catch (TaskCanceledException) { break; }
+                catch { }
+            }
+        }
+
+        private void CleanupOldBufferFiles()
+        {
+            try
+            {
+                var dir = new DirectoryInfo(_bufferFolder);
+                var files = dir.GetFiles("video_*.ts").OrderByDescending(f => f.CreationTime).ToList();
+                
+                long maxBytes = (long)_settings.Buffer.VideoBufferSizeMB * 1024 * 1024;
+                long currentBytes = 0;
+                
+                // Keep files within budget
+                foreach (var file in files)
+                {
+                    currentBytes += file.Length;
+                    if (currentBytes > maxBytes)
+                    {
+                        try { file.Delete(); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private async Task<bool> StartFFmpegProcess(string ffmpegPath, string inputFormat, string outputFilePattern, int segmentTime, int bitrateKbps, bool tryHardwareEncoding)
+        {
+            string encoder = "libx264";
+            string preset = "-preset ultrafast -tune zerolatency -threads 4";
             
-            string arguments = $"-y -f ddagrab -framerate {_settings.Video.Framerate} -draw_mouse 1 -i desktop " +
-                             $"-c:v libx264 -preset ultrafast -tune zerolatency " +
-                             $"-b:v {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bitrateKbps * 2}k " +
+            if (tryHardwareEncoding)
+            {
+                encoder = "h264_nvenc";
+                preset = "-preset fast -delay 0"; 
+            }
+
+            // Use -strftime 1 to support timestamp in filename
+            string arguments = $"-y -f {inputFormat} -framerate {_settings.Video.Framerate} -draw_mouse 1 -i desktop " +
+                             $"-c:v {encoder} {preset} " +
+                             $"-b:v {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bitrateKbps}k " +
                              $"-pix_fmt yuv420p " + 
-                             $"-rtbufsize 100M " + 
-                             $"-f segment -segment_time {segmentTime} -segment_wrap {segmentWrap} -reset_timestamps 1 " +
+                             $"-f segment -segment_time {segmentTime} -strftime 1 -reset_timestamps 1 " +
                              $"\"{outputFilePattern}\"";
 
             var startInfo = new ProcessStartInfo
@@ -80,27 +139,47 @@ namespace ClipStudioDesktop.Services.Video
                 Arguments = arguments,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                RedirectStandardInput = true // Needed to stop gracefully with 'q'
+                RedirectStandardInput = true
             };
 
             try
             {
                 _ffmpegProcess = Process.Start(startInfo);
-                _isRecording = true;
+                
+                if (_ffmpegProcess != null)
+                {
+                    _ffmpegProcess.EnableRaisingEvents = true;
+                    _ffmpegProcess.Exited += (s, e) => 
+                    {
+                        _isRecording = false;
+                        System.Diagnostics.Debug.WriteLine($"FFmpeg exited unexpectedly. Exit code: {_ffmpegProcess.ExitCode}");
+                    };
+                }
+                
+                await Task.Delay(2000);
+                
+                if (_ffmpegProcess == null || _ffmpegProcess.HasExited)
+                {
+                    return false;
+                }
+                
+                return true;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to start FFmpeg: {ex.Message}");
+                return false;
             }
         }
 
         public void Stop()
         {
+            _cleanupCts?.Cancel();
+            
             if (!_isRecording || _ffmpegProcess == null) return;
 
             try
             {
-                // Send 'q' to stop gracefully
                 _ffmpegProcess.StandardInput.WriteLine("q");
                 _ffmpegProcess.WaitForExit(2000);
                 
@@ -109,10 +188,7 @@ namespace ClipStudioDesktop.Services.Video
                     _ffmpegProcess.Kill();
                 }
             }
-            catch
-            {
-                // Ignore errors during stop
-            }
+            catch { }
             finally
             {
                 _ffmpegProcess?.Dispose();
@@ -127,72 +203,90 @@ namespace ClipStudioDesktop.Services.Video
 
             try
             {
-                // 1. Identify relevant segments
                 var directory = new DirectoryInfo(_bufferFolder);
-                var files = directory.GetFiles("video_*.mp4")
-                                   .OrderBy(f => f.LastWriteTime)
+                var files = directory.GetFiles("video_*.ts")
+                                   .OrderBy(f => f.CreationTime)
                                    .ToList();
 
                 if (files.Count == 0) return null;
 
-                // Calculate how many files we need
-                // Each file is approx 10s. 
-                int filesNeeded = (int)Math.Ceiling(durationSeconds / 10.0);
+                // Calculate needed files
+                // Each file is approx 5s (segmentTime)
+                int filesNeeded = (int)Math.Ceiling(durationSeconds / 5.0) + 2; // +2 for safety margin
                 
-                // Take the last N files
                 var clipsToConcat = files.Skip(Math.Max(0, files.Count - filesNeeded)).ToList();
 
                 if (clipsToConcat.Count == 0) return null;
 
-                // 2. Create concat list file
-                string listFile = Path.Combine(_bufferFolder, "concat_list.txt");
-                var sb = new StringBuilder();
+                // Copy to temp files to avoid locking issues
+                var tempFiles = new List<string>();
                 foreach (var clip in clipsToConcat)
                 {
-                    // FFmpeg concat requires absolute paths with forward slashes or escaped backslashes
-                    sb.AppendLine($"file '{clip.FullName.Replace("\\", "/")}'");
+                    string tempPath = Path.Combine(_bufferFolder, $"temp_copy_{Path.GetFileName(clip.Name)}");
+                    try 
+                    {
+                        // Use Copy with FileShare.ReadWrite
+                        using (var src = new FileStream(clip.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        using (var dst = new FileStream(tempPath, FileMode.Create))
+                        {
+                            await src.CopyToAsync(dst);
+                        }
+                        tempFiles.Add(tempPath);
+                    }
+                    catch { /* Skip if locked/failed */ }
+                }
+
+                if (tempFiles.Count == 0) return null;
+
+                // Create concat list
+                string listFile = Path.Combine(_bufferFolder, "concat_list.txt");
+                var sb = new StringBuilder();
+                foreach (var tempFile in tempFiles)
+                {
+                    sb.AppendLine($"file '{tempFile.Replace("\\", "/")}'");
                 }
                 await File.WriteAllTextAsync(listFile, sb.ToString());
 
-                // 3. Run FFmpeg
-                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff");
                 string finalOutputFile = Path.Combine(outputFolder, $"clip_{timestamp}.mp4");
                 string ffmpegPath = FFmpegHelper.GetFFmpegPath();
 
+                // Concat and convert to MP4
+                string tempVideoFull = Path.Combine(_bufferFolder, $"temp_video_full_{timestamp}.mp4");
+                // -bsf:a aac_adtstoasc is needed when converting TS to MP4 if audio is AAC, but we have no audio in video stream usually
+                string concatArgs = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{tempVideoFull}\"";
+                
+                var pConcat = Process.Start(new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = concatArgs,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                if (pConcat != null) await pConcat.WaitForExitAsync();
+
+                // Trim
+                string tempVideoTrimmed = Path.Combine(_bufferFolder, $"temp_video_trimmed_{timestamp}.mp4");
+                string trimArgs = $"-y -sseof -{durationSeconds} -i \"{tempVideoFull}\" -c copy \"{tempVideoTrimmed}\"";
+                
+                var pTrim = Process.Start(new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = trimArgs,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                if (pTrim != null) await pTrim.WaitForExitAsync();
+
                 if (string.IsNullOrEmpty(audioPathToMerge))
                 {
-                    // Video only
-                    string args = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{finalOutputFile}\"";
-                    var p = Process.Start(new ProcessStartInfo
-                    {
-                        FileName = ffmpegPath,
-                        Arguments = args,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    });
-                    await p.WaitForExitAsync();
+                    File.Move(tempVideoTrimmed, finalOutputFile);
                 }
                 else
                 {
-                    // Video + Audio Merge
-                    // First concat video to temp file
-                    string tempVideoFile = Path.Combine(_bufferFolder, $"temp_video_{timestamp}.mp4");
-                    string concatArgs = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{tempVideoFile}\"";
-                    
-                    var pConcat = Process.Start(new ProcessStartInfo
-                    {
-                        FileName = ffmpegPath,
-                        Arguments = concatArgs,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    });
-                    await pConcat.WaitForExitAsync();
-
-                    // Then merge with audio
-                    // -c:v copy: Copy video stream (fast)
-                    // -c:a aac: Encode audio to AAC
-                    // -shortest: Stop when the shortest stream ends (usually audio)
-                    string mergeArgs = $"-y -i \"{tempVideoFile}\" -i \"{audioPathToMerge}\" -c:v copy -c:a aac -shortest \"{finalOutputFile}\"";
+                    // Merge with audio
+                    // Re-encode audio to AAC, copy video
+                    string mergeArgs = $"-y -i \"{tempVideoTrimmed}\" -i \"{audioPathToMerge}\" -c:v copy -c:a aac -shortest \"{finalOutputFile}\"";
                     
                     var pMerge = Process.Start(new ProcessStartInfo
                     {
@@ -201,13 +295,20 @@ namespace ClipStudioDesktop.Services.Video
                         UseShellExecute = false,
                         CreateNoWindow = true
                     });
-                    await pMerge.WaitForExitAsync();
-
-                    // Cleanup temp video
-                    try { File.Delete(tempVideoFile); } catch { }
+                    if (pMerge != null) await pMerge.WaitForExitAsync();
                 }
 
-                return finalOutputFile;
+                // Cleanup
+                try 
+                { 
+                    File.Delete(listFile);
+                    File.Delete(tempVideoFull);
+                    File.Delete(tempVideoTrimmed);
+                    foreach(var f in tempFiles) File.Delete(f);
+                } 
+                catch { }
+
+                return File.Exists(finalOutputFile) ? finalOutputFile : null;
             }
             catch (Exception ex)
             {

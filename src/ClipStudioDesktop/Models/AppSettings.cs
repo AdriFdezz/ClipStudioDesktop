@@ -65,7 +65,7 @@ namespace ClipStudioDesktop.Models
         public string Key { get; set; } = "";
         public string Type { get; set; } = ""; // audio, video, screenshot
         public int Duration { get; set; } // seconds
-        public string Mode { get; set; } // selection, fullscreen (for screenshots)
+        public string Mode { get; set; } = ""; // selection, fullscreen (for screenshots)
     }
 
     public class BufferSettings
