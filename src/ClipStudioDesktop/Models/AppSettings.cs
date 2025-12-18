@@ -37,6 +37,9 @@ namespace ClipStudioDesktop.Models
         public int SampleRate { get; set; } = 48000;
         public int Channels { get; set; } = 2;
         public string Source { get; set; } = "system";
+        public string SelectedAudioDevice { get; set; } = ""; // Empty = auto-detect
+        public bool EnableMicrophone { get; set; } = false; // Include microphone in recordings
+        public string SelectedMicrophone { get; set; } = ""; // Empty = default microphone
     }
 
     public class VideoSettings
@@ -47,6 +50,7 @@ namespace ClipStudioDesktop.Models
         public int Framerate { get; set; } = 60;
         public int Bitrate { get; set; } = 8000;
         public string Compression { get; set; } = "balanced";
+        public bool CapturePrimaryMonitorOnly { get; set; } = true; // Use Desktop Duplication for primary monitor only
     }
 
     public class ScreenshotSettings
@@ -70,8 +74,10 @@ namespace ClipStudioDesktop.Models
 
     public class BufferSettings
     {
-        public int MaxDurationSeconds { get; set; } = 300;
-        public int AudioBufferSizeMB { get; set; } = 50;
-        public int VideoBufferSizeMB { get; set; } = 1024; // 1GB Reserved
+        // Tamaño máximo del buffer en GB (para audio + video combinados)
+        public double MaxBufferSizeGB { get; set; } = 5.0; // 5GB por defecto
+        
+        // Calculados en bytes para uso interno
+        public long MaxBufferBytes => (long)(MaxBufferSizeGB * 1024 * 1024 * 1024);
     }
 }

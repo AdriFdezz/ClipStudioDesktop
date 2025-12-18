@@ -1,0 +1,12 @@
+Basado en el log que enviaste:
+- isRecording=True ✓
+- _ffmpegProcess != null: True ✓  
+- _ffmpegProcess.HasExited: False ✓
+- Tiene archivo de audio generado ✓
+
+El problema debe estar en una de estas áreas:
+1. No encuentra archivos .ts en el buffer
+2. FFmpeg concat/trim/merge falla
+3. El archivo final no se crea
+
+Voy a simplificar el código y agregar logging mínimo.

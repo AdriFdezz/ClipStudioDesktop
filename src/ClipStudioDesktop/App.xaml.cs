@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
@@ -18,6 +19,7 @@ namespace ClipStudioDesktop
 {
     public partial class App : System.Windows.Application
     {
+        private static Mutex? _mutex;
         private TaskbarIcon? _taskbarIcon;
         private ISettingsService _settingsService = null!;
         private IHotKeyService _hotKeyService = null!;
@@ -31,6 +33,18 @@ namespace ClipStudioDesktop
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Single instance check
+            const string mutexName = "ClipStudioDesktop_SingleInstance_Mutex";
+            _mutex = new Mutex(true, mutexName, out bool createdNew);
+            
+            if (!createdNew)
+            {
+                // Ya hay una instancia ejecutándose
+                System.Windows.MessageBox.Show("Clip Studio Desktop ya está en ejecución.", "Aplicación ya iniciada", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+            
             base.OnStartup(e);
 
             // Global exception handling
@@ -155,15 +169,11 @@ namespace ClipStudioDesktop
             openFoldersItem.Items.Add(openImages);
 
             contextMenu.Items.Add(openFoldersItem);
-
-            contextMenu.Items.Add(new System.Windows.Controls.Separator());
             
             var configItem = new System.Windows.Controls.MenuItem();
             configItem.Header = "Configuración";
             configItem.Click += (s, args) => OpenConfiguration();
             contextMenu.Items.Add(configItem);
-
-            contextMenu.Items.Add(new System.Windows.Controls.Separator());
 
             var exitItem = new System.Windows.Controls.MenuItem();
             exitItem.Header = "Salir";
@@ -178,15 +188,15 @@ namespace ClipStudioDesktop
 
         private void RegisterConfiguredHotkeys()
         {
+            int successCount = 0;
+            int failCount = 0;
+            
             foreach (var hotkey in _settingsService.CurrentSettings.Hotkeys)
             {
                 try 
                 {
                     _hotKeyService.RegisterHotKey(hotkey.Key, async () => 
                     {
-                        // DEBUG: Uncomment to verify hotkey trigger
-                        // System.Windows.MessageBox.Show($"Atajo detectado: {hotkey.Key} ({hotkey.Type})");
-
                         // Show processing window for clips
                         Views.ProcessingWindow? processingWindow = null;
                         if (hotkey.Type == "audio" || hotkey.Type == "video")
@@ -207,15 +217,41 @@ namespace ClipStudioDesktop
 
                         try
                         {
+                            System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Starting SaveClipAsync - Type: {hotkey.Type}, Duration: {hotkey.Duration}s");
+                            
                             if (hotkey.Type == "audio")
                             {
-                                await _recordingService.SaveClipAsync(hotkey.Duration, false);
-                                PlayNotificationSound();
+                                var saveTask = _recordingService.SaveClipAsync(hotkey.Duration, false);
+                                var timeoutTask = System.Threading.Tasks.Task.Delay(30000); // 30 second timeout
+                                var completedTask = await System.Threading.Tasks.Task.WhenAny(saveTask, timeoutTask);
+                                
+                                if (completedTask == timeoutTask)
+                                {
+                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Audio SaveClipAsync TIMEOUT");
+                                    System.Windows.MessageBox.Show("El guardado de audio tardó demasiado y se canceló.", "Timeout", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                }
+                                else
+                                {
+                                    await saveTask; // Re-await to get exceptions
+                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Audio SaveClipAsync completed");
+                                }
                             }
                             else if (hotkey.Type == "video")
                             {
-                                await _recordingService.SaveClipAsync(hotkey.Duration, true);
-                                PlayNotificationSound();
+                                var saveTask = _recordingService.SaveClipAsync(hotkey.Duration, true);
+                                var timeoutTask = System.Threading.Tasks.Task.Delay(30000); // 30 second timeout
+                                var completedTask = await System.Threading.Tasks.Task.WhenAny(saveTask, timeoutTask);
+                                
+                                if (completedTask == timeoutTask)
+                                {
+                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Video SaveClipAsync TIMEOUT");
+                                    System.Windows.MessageBox.Show("El guardado de video tardó demasiado y se canceló.", "Timeout", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                }
+                                else
+                                {
+                                    await saveTask; // Re-await to get exceptions
+                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Video SaveClipAsync completed");
+                                }
                             }
                             else if (hotkey.Type == "screenshot")
                             {
@@ -241,23 +277,42 @@ namespace ClipStudioDesktop
                         }
                         catch (Exception ex)
                         {
+                            System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Exception in hotkey handler: {ex.Message}\n{ex.StackTrace}");
                             System.Windows.MessageBox.Show($"Error al ejecutar atajo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
                         finally
                         {
+                            System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Entering finally block");
                             if (processingWindow != null)
                             {
-                                System.Windows.Application.Current.Dispatcher.Invoke(() => processingWindow.Close());
+                                try
+                                {
+                                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                                    {
+                                        System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Closing ProcessingWindow");
+                                        processingWindow.Close();
+                                        System.Diagnostics.Debug.WriteLine("[App.xaml.cs] ProcessingWindow closed successfully");
+                                    });
+                                }
+                                catch (Exception closeEx)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Error closing window: {closeEx.Message}");
+                                }
                             }
+                            System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Finally block completed");
                         }
                     });
+                    successCount++;
                 }
                 catch (Exception ex)
                 {
                     // Log error registering hotkey
-                    System.Windows.MessageBox.Show($"Error al registrar atajo {hotkey.Key}: {ex.Message}\nEs posible que otra aplicación lo esté usando.", "Error de Atajo", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    failCount++;
+                    System.Diagnostics.Debug.WriteLine($"Failed to register hotkey {hotkey.Key}: {ex.Message}");
                 }
             }
+            
+            System.Diagnostics.Debug.WriteLine($"Hotkeys registered: {successCount} success, {failCount} failed");
         }
 
         private void OpenConfiguration()
@@ -304,6 +359,8 @@ namespace ClipStudioDesktop
             _taskbarIcon?.Dispose();
             (_hotKeyService as IDisposable)?.Dispose();
             _recordingService?.Dispose();
+            _mutex?.ReleaseMutex();
+            _mutex?.Dispose();
             base.OnExit(e);
         }
     }

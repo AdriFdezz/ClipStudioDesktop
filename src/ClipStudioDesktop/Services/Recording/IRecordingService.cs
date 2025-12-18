@@ -10,5 +10,7 @@ namespace ClipStudioDesktop.Services.Recording
         Task StartRecordingAsync();
         Task StopRecordingAsync();
         Task SaveClipAsync(int durationSeconds, bool isVideo);
+        void ClearBuffer();
+        void UpdateBufferReservation();
     }
 }

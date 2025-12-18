@@ -34,6 +34,8 @@ namespace ClipStudioDesktop.Services.Hotkeys
 
             var (modifiers, key) = ParseKeyCombination(keyCombination);
             
+            System.Diagnostics.Debug.WriteLine($"Registrando hotkey: {keyCombination} -> Modifiers: {modifiers}, Key: {key}");
+            
             if (key == Key.None)
             {
                 System.Diagnostics.Debug.WriteLine($"Invalid hotkey combination: {keyCombination} (No key found)");
@@ -41,15 +43,19 @@ namespace ClipStudioDesktop.Services.Hotkeys
             }
 
             int id = _currentId++;
+            uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+            System.Diagnostics.Debug.WriteLine($"VirtualKey: {vk} (0x{vk:X})");
             
-            if (RegisterHotKey(_windowHandle, id, (uint)modifiers, (uint)KeyInterop.VirtualKeyFromKey(key)))
+            if (RegisterHotKey(_windowHandle, id, (uint)modifiers, vk))
             {
                 _callbacks.Add(id, action);
+                System.Diagnostics.Debug.WriteLine($"✓ Hotkey '{keyCombination}' registrado correctamente con ID {id}");
             }
             else
             {
                 // Failed to register
                 int errorCode = Marshal.GetLastWin32Error();
+                System.Diagnostics.Debug.WriteLine($"✗ Error registrando '{keyCombination}'. Error: {errorCode}");
                 throw new InvalidOperationException($"No se pudo registrar el atajo '{keyCombination}'. Código de error: {errorCode}. Es probable que otra aplicación ya lo esté usando.");
             }
         }
@@ -80,37 +86,58 @@ namespace ClipStudioDesktop.Services.Hotkeys
             ModifierKeys modifiers = ModifierKeys.None;
             Key key = Key.None;
 
+            System.Diagnostics.Debug.WriteLine($"Parsing: {combination}");
+
             foreach (var part in parts)
             {
                 string trimmed = part.Trim();
+                System.Diagnostics.Debug.WriteLine($"  Part: '{trimmed}'");
                 
-                // Handle aliases
-                if (trimmed.Equals("Ctrl", StringComparison.OrdinalIgnoreCase)) trimmed = "Control";
-                if (trimmed.Equals("Shift", StringComparison.OrdinalIgnoreCase)) trimmed = "Shift";
-                if (trimmed.Equals("Alt", StringComparison.OrdinalIgnoreCase)) trimmed = "Alt";
-                
-                if (Enum.TryParse(trimmed, true, out ModifierKeys mod))
+                // Handle modifier keys explicitly
+                if (trimmed.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) || 
+                    trimmed.Equals("Control", StringComparison.OrdinalIgnoreCase))
                 {
-                    modifiers |= mod;
+                    modifiers |= ModifierKeys.Control;
+                    System.Diagnostics.Debug.WriteLine($"    -> Added Control modifier");
                 }
+                else if (trimmed.Equals("Shift", StringComparison.OrdinalIgnoreCase))
+                {
+                    modifiers |= ModifierKeys.Shift;
+                    System.Diagnostics.Debug.WriteLine($"    -> Added Shift modifier");
+                }
+                else if (trimmed.Equals("Alt", StringComparison.OrdinalIgnoreCase))
+                {
+                    modifiers |= ModifierKeys.Alt;
+                    System.Diagnostics.Debug.WriteLine($"    -> Added Alt modifier");
+                }
+                else if (trimmed.Equals("Win", StringComparison.OrdinalIgnoreCase) || 
+                         trimmed.Equals("Windows", StringComparison.OrdinalIgnoreCase))
+                {
+                    modifiers |= ModifierKeys.Windows;
+                    System.Diagnostics.Debug.WriteLine($"    -> Added Windows modifier");
+                }
+                // Handle number keys (1-9, 0)
+                else if (trimmed.Length == 1 && char.IsDigit(trimmed[0]))
+                {
+                    if (Enum.TryParse("D" + trimmed, true, out Key numKey))
+                    {
+                        key = numKey;
+                        System.Diagnostics.Debug.WriteLine($"    -> Key: {key}");
+                    }
+                }
+                // Handle letter keys and other keys
                 else if (Enum.TryParse(trimmed, true, out Key k))
                 {
                     key = k;
+                    System.Diagnostics.Debug.WriteLine($"    -> Key: {key}");
                 }
-                // Handle number keys specifically if needed (e.g. "1" -> D1)
-                else if (trimmed.Length == 1 && char.IsDigit(trimmed[0]))
+                else
                 {
-                     if (Enum.TryParse("D" + trimmed, true, out Key numKey))
-                     {
-                         key = numKey;
-                     }
+                    System.Diagnostics.Debug.WriteLine($"    -> UNKNOWN: '{trimmed}'");
                 }
             }
 
-            // If no modifiers found but "Ctrl" or "Alt" or "Shift" was in the string, it might have been parsed as Key.LeftCtrl etc.
-            // But we want ModifierKeys for RegisterHotKey.
-            // Actually, Enum.TryParse<ModifierKeys> handles "Control", "Alt", "Shift".
-            
+            System.Diagnostics.Debug.WriteLine($"Result: Modifiers={modifiers}, Key={key}");
             return (modifiers, key);
         }
 

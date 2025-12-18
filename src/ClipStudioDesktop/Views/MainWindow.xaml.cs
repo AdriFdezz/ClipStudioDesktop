@@ -1,5 +1,7 @@
 using ClipStudioDesktop.ViewModels;
 using System.Windows;
+using System.Media;
+using System.IO;
 
 namespace ClipStudioDesktop.Views
 {
@@ -125,6 +127,47 @@ namespace ClipStudioDesktop.Views
             // Force binding update
             var binding = textBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty);
             binding?.UpdateSource();
+        }
+
+        private void TestAudioDevice_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Play notification sound to test audio device
+                string soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "Notification_sound.wav");
+                
+                if (!File.Exists(soundPath))
+                {
+                    System.Windows.MessageBox.Show(
+                        $"No se encontró el archivo de sonido:\n{soundPath}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+                
+                using (var player = new SoundPlayer(soundPath))
+                {
+                    player.PlaySync(); // Use PlaySync instead of Play
+                }
+                
+                System.Windows.MessageBox.Show(
+                    "Si escuchaste el sonido, tu dispositivo de audio de Windows está funcionando.\n\n" +
+                    "IMPORTANTE: Para grabar el audio del sistema, debes seleccionar un dispositivo " +
+                    "con 'VoiceMeeter' en el nombre, o habilitar 'Mezcla estéreo' en Windows.\n\n" +
+                    "Los dispositivos que NO tienen 'VoiceMeeter' solo capturan micrófono.",
+                    "Test de Audio",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(
+                    $"Error al reproducir el sonido: {ex.Message}\n\nPath: {Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "Notification_sound.wav")}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
     }
 }

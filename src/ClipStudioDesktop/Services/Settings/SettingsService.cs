@@ -88,17 +88,17 @@ namespace ClipStudioDesktop.Services.Settings
             // Initialize default hotkeys
             CurrentSettings.Hotkeys = new List<HotKeyConfig>
             {
-                new() { Key = "Ctrl+1", Type = "audio", Duration = 30 },
-                new() { Key = "Ctrl+2", Type = "audio", Duration = 60 },
-                new() { Key = "Ctrl+3", Type = "audio", Duration = 90 },
-                new() { Key = "Ctrl+4", Type = "audio", Duration = 120 },
-                new() { Key = "Ctrl+5", Type = "audio", Duration = 300 },
+                new() { Key = "Ctrl+Shift+1", Type = "audio", Duration = 30 },
+                new() { Key = "Ctrl+Shift+2", Type = "audio", Duration = 60 },
+                new() { Key = "Ctrl+Shift+3", Type = "audio", Duration = 90 },
+                new() { Key = "Ctrl+Shift+4", Type = "audio", Duration = 120 },
+                new() { Key = "Ctrl+Shift+5", Type = "audio", Duration = 180 },
                 
-                new() { Key = "Alt+1", Type = "video", Duration = 30 },
-                new() { Key = "Alt+2", Type = "video", Duration = 60 },
-                new() { Key = "Alt+3", Type = "video", Duration = 90 },
-                new() { Key = "Alt+4", Type = "video", Duration = 120 },
-                new() { Key = "Alt+5", Type = "video", Duration = 300 },
+                new() { Key = "Alt+Shift+1", Type = "video", Duration = 30 },
+                new() { Key = "Alt+Shift+2", Type = "video", Duration = 60 },
+                new() { Key = "Alt+Shift+3", Type = "video", Duration = 90 },
+                new() { Key = "Alt+Shift+4", Type = "video", Duration = 120 },
+                new() { Key = "Alt+Shift+5", Type = "video", Duration = 180 },
                 
                 new() { Key = "Alt+X", Type = "screenshot", Mode = "selection" },
                 new() { Key = "Alt+C", Type = "screenshot", Mode = "fullscreen" },
