@@ -25,7 +25,14 @@ namespace ClipStudioDesktop.Views
             BackgroundImage.Source = screenCapture;
             
             // Ensure focus for key events
-            Loaded += (s, e) => Focus();
+            Loaded += (s, e) => 
+            {
+                Focus();
+                // Initialize cursor position
+                var mousePos = Mouse.GetPosition(this);
+                Canvas.SetLeft(CustomCursorCanvas, mousePos.X);
+                Canvas.SetTop(CustomCursorCanvas, mousePos.Y);
+            };
 
             // Handle Escape to cancel
             KeyDown += (s, e) => 
@@ -57,9 +64,13 @@ namespace ClipStudioDesktop.Views
 
         private void Canvas_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            if (!_isDragging) return;
-
             var currentPoint = e.GetPosition(SelectionCanvas);
+            
+            // Update custom cursor position
+            Canvas.SetLeft(CustomCursorCanvas, currentPoint.X);
+            Canvas.SetTop(CustomCursorCanvas, currentPoint.Y);
+
+            if (!_isDragging) return;
             
             double x = Math.Min(currentPoint.X, _startPoint.X);
             double y = Math.Min(currentPoint.Y, _startPoint.Y);
