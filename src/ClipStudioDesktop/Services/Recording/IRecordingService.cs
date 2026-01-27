@@ -7,6 +7,7 @@ namespace ClipStudioDesktop.Services.Recording
     {
         bool IsRecording { get; }
         event EventHandler<bool> RecordingStateChanged;
+        event EventHandler<string> ClipSaved;
         Task StartRecordingAsync();
         Task StopRecordingAsync();
         Task SaveClipAsync(int durationSeconds, bool isVideo);

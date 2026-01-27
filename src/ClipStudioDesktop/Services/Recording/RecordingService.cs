@@ -16,6 +16,8 @@ namespace ClipStudioDesktop.Services.Recording
         private readonly ISettingsService _settingsService;
         private readonly IStorageService _storageService;
         private FFmpegRecorder? _videoRecorder;
+        private AudioRecorder? _audioRecorder;
+        private MicrophoneRecorder? _micRecorder;
         private System.Timers.Timer? _checkTimer;
 
         public RecordingService(ISettingsService settingsService, IStorageService storageService)
@@ -70,22 +72,54 @@ namespace ClipStudioDesktop.Services.Recording
 
         public bool IsRecording { get; private set; }
         public event EventHandler<bool>? RecordingStateChanged;
+        public event EventHandler<string>? ClipSaved;
 
         public async Task StartRecordingAsync()
         {
             if (IsRecording) return;
 
-            // Initialize and start FFmpeg recorder (captures video + audio together)
+            // Initialize and start FFmpeg recorder (video only)
             _videoRecorder = new FFmpegRecorder(_settingsService.CurrentSettings);
-            bool started = await _videoRecorder.StartAsync();
+            bool videoStarted = await _videoRecorder.StartAsync();
 
-            if (!started)
+            if (!videoStarted)
             {
-                System.Windows.MessageBox.Show("No se pudo iniciar la grabación con FFmpeg.", "Error de Grabación", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show("No se pudo iniciar la grabación de video con FFmpeg.", "Error de Grabación", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            System.Diagnostics.Debug.WriteLine("FFmpeg recording started - audio and video synchronized");
+            // Initialize and start Audio recorder (NAudio WASAPI loopback for desktop audio)
+            // This will automatically capture all system audio without configuration
+            _audioRecorder = new AudioRecorder(_settingsService.CurrentSettings);
+            bool audioStarted = _audioRecorder.Start();
+            
+            if (!audioStarted)
+            {
+                // Audio failed but video is running - continue with video only
+                System.Diagnostics.Debug.WriteLine("WARNING: Audio recording failed to start (no audio device active?). Continuing with video only.");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("Audio recording started - capturing desktop audio via WASAPI loopback");
+            }
+
+            // Initialize and start Microphone recorder if enabled
+            if (_settingsService.CurrentSettings.Audio.EnableMicrophone)
+            {
+                _micRecorder = new MicrophoneRecorder(_settingsService.CurrentSettings);
+                bool micStarted = _micRecorder.Start();
+                if (micStarted)
+                {
+                     System.Diagnostics.Debug.WriteLine($"Microphone recording started: {_settingsService.CurrentSettings.Audio.SelectedMicrophone}");
+                }
+                else
+                {
+                     System.Diagnostics.Debug.WriteLine("Microphone recording failed to start or disabled");
+                     _micRecorder = null;
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine("Recording started - video and audio capturing separately");
             IsRecording = true;
             RecordingStateChanged?.Invoke(this, IsRecording);
             StartHealthCheck();
@@ -123,6 +157,8 @@ namespace ClipStudioDesktop.Services.Recording
         {
             _checkTimer?.Stop();
             _videoRecorder?.Stop();
+            _audioRecorder?.Stop();
+            _micRecorder?.Stop();
             IsRecording = false;
             RecordingStateChanged?.Invoke(this, IsRecording);
             return Task.CompletedTask;
@@ -158,6 +194,8 @@ namespace ClipStudioDesktop.Services.Recording
             try
             {
                 _videoRecorder?.Dispose();
+                _audioRecorder?.Dispose();
+                _micRecorder?.Dispose();
                 
                 // Limpiar buffer al cerrar la aplicación
                 CleanBufferFolder();
@@ -178,28 +216,107 @@ namespace ClipStudioDesktop.Services.Recording
         {
             if (durationSeconds <= 0) durationSeconds = 30; // Default to 30s if invalid
 
-            if (_videoRecorder != null)
+            if (_videoRecorder == null)
             {
-                string folder = _storageService.GetVideoFolder();
-                _storageService.EnsureDirectoriesExist();
+                System.Windows.MessageBox.Show("El servicio de grabación no está inicializado.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
 
-                // FFmpegRecorder already has audio integrated, no need to merge
-                string? file = await _videoRecorder.SaveClipAsync(durationSeconds, folder, null);
+            _storageService.EnsureDirectoriesExist();
+            string? outputFile = null;
 
-                if (file != null)
+            try
+            {
+                if (isVideo)
                 {
-                    PlayNotificationSound();
+                    // Save video clip with audio from NAudio
+                    string videoFolder = _storageService.GetVideoFolder();
+                    string? audioTempFile = null;
+                    
+                    // First, save audio to a temp file if AudioRecorder is active
+                    if (_audioRecorder != null)
+                    {
+                        try
+                        {
+                            string tempFolder = Path.Combine(Path.GetTempPath(), "ClipStudio_AudioMerge");
+                            Directory.CreateDirectory(tempFolder);
+                            audioTempFile = _audioRecorder.SaveClip(durationSeconds, tempFolder);
+                            System.Diagnostics.Debug.WriteLine($"Audio saved to temp: {audioTempFile}");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Could not save audio (continuing without): {ex.Message}");
+                            audioTempFile = null;
+                        }
+                    }
+                    
+                    // Save microphone audio to a temp file if MicrophoneRecorder is active
+                    string? micTempFile = null;
+                    if (_micRecorder != null)
+                    {
+                        try
+                        {
+                            string tempFolder = Path.Combine(Path.GetTempPath(), "ClipStudio_AudioMerge");
+                            Directory.CreateDirectory(tempFolder);
+                            micTempFile = _micRecorder.SaveClip(durationSeconds, tempFolder);
+                            System.Diagnostics.Debug.WriteLine($"Mic audio saved to temp: {micTempFile}");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Could not save mic audio (continuing without): {ex.Message}");
+                            micTempFile = null;
+                        }
+                    }
+                    
+                    // Save video clip - pass audio files to merge
+                    outputFile = await _videoRecorder.SaveClipAsync(durationSeconds, videoFolder, audioTempFile, micTempFile);
+                    
+                    // Clean up temp audio files
+                    if (micTempFile != null)
+                    {
+                        try { File.Delete(micTempFile); } catch { }
+                    }
+                    
+                    // Clean up temp audio file
+                    if (audioTempFile != null)
+                    {
+                        try { File.Delete(audioTempFile); } catch { }
+                    }
                 }
                 else
                 {
-                    System.Windows.MessageBox.Show("No se pudo guardar el clip. Es posible que la grabación no esté activa o no haya suficiente buffer.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    // Save audio-only clip using AudioRecorder directly
+                    if (_audioRecorder != null)
+                    {
+                        string audioFolder = _storageService.GetAudioFolder();
+                        outputFile = _audioRecorder.SaveClip(durationSeconds, audioFolder);
+                    }
+                    else
+                    {
+                        System.Windows.MessageBox.Show("El grabador de audio no está disponible.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                }
+
+                if (outputFile != null)
+                {
+                    PlayNotificationSound();
+                    ClipSaved?.Invoke(this, outputFile);
+                }
+                else
+                {
+                    string clipType = isVideo ? "video" : "audio";
+                    System.Windows.MessageBox.Show($"No se pudo guardar el clip de {clipType}. Es posible que la grabación no esté activa o no haya suficiente buffer.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                System.Windows.MessageBox.Show("El servicio de grabación no está inicializado.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Error saving clip: {ex.Message}");
+                string clipType = isVideo ? "video" : "audio";
+                System.Windows.MessageBox.Show($"Error al guardar el clip de {clipType}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
         private void PlayNotificationSound()
         {

@@ -139,6 +139,15 @@ namespace ClipStudioDesktop
                 });
             };
 
+            // Subscribe to ClipSaved event
+            _recordingService.ClipSaved += (s, path) =>
+            {
+                this.Dispatcher.Invoke(() =>
+                {
+                    ShowNotification("Clip Guardado", $"Clip guardado exitosamente:\n{System.IO.Path.GetFileName(path)}");
+                });
+            };
+
             toggleItem.Click += async (s, args) => 
             {
                 if (_recordingService.IsRecording)
@@ -313,6 +322,14 @@ namespace ClipStudioDesktop
             }
             
             System.Diagnostics.Debug.WriteLine($"Hotkeys registered: {successCount} success, {failCount} failed");
+        }
+
+        private void ShowNotification(string title, string message)
+        {
+            if (_settingsService.CurrentSettings.General.ShowNotifications && _taskbarIcon != null)
+            {
+                _taskbarIcon.ShowBalloonTip(title, message, BalloonIcon.Info);
+            }
         }
 
         private void OpenConfiguration()

@@ -283,7 +283,7 @@ namespace ClipStudioDesktop.Services.Audio
                 }
 
                 string format = _settings.Audio.Format.ToLower();
-                string extension = format == "mp3" ? "mp3" : "wav";
+                string extension = format; // mp3 or flac
                 string outputFile = Path.Combine(outputFolder, $"clip_{timestamp}.{extension}");
 
                 ConvertRawToOutput(trimmedRawFile, outputFile, format);
@@ -322,9 +322,20 @@ namespace ClipStudioDesktop.Services.Audio
                  string sampleRate = _waveFormat!.SampleRate.ToString();
                  string channels = _waveFormat!.Channels.ToString();
                  
-                 string codecArgs = format == "mp3" 
-                    ? $"-c:a libmp3lame -b:a {_settings.Audio.Bitrate}k" 
-                    : "-c:a pcm_s16le"; // WAV
+                 // Codec selection based on format
+                 string codecArgs;
+                 switch (format.ToLower())
+                 {
+                     case "mp3":
+                         codecArgs = $"-c:a libmp3lame -b:a {_settings.Audio.Bitrate}k";
+                         break;
+                     case "flac":
+                         codecArgs = "-c:a flac -compression_level 5"; // FLAC lossless
+                         break;
+                     default:
+                         codecArgs = "-c:a libmp3lame -b:a 192k"; // Fallback to MP3
+                         break;
+                 }
 
                  // Simple conversion without seeking
                  string args = $"-y -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \"{inputFile}\" {codecArgs} \"{outputFile}\"";

@@ -90,13 +90,114 @@ namespace ClipStudioDesktop.ViewModels
         private void LoadAudioDevices()
         {
             AudioDevices.Clear();
-            AudioDevices.Add("Audio del Sistema (NAudio)");
+            AudioDevices.Add("Ninguno (sin audio de escritorio)");
             
-            // NAudio maneja la captura de audio automáticamente
-            // No necesitamos listar dispositivos manualmente
-            
-            // Load saved device or default to system audio
-            SelectedAudioDevice = "Audio del Sistema (NAudio)";
+            try
+            {
+                string ffmpegPath = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+                if (string.IsNullOrEmpty(ffmpegPath))
+                {
+                    Debug.WriteLine("FFmpeg no encontrado para listar dispositivos de audio");
+                    return;
+                }
+
+                // Use FFmpeg to list audio devices
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = "-list_devices true -f dshow -i dummy",
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardErrorEncoding = System.Text.Encoding.UTF8
+                };
+
+                using var process = Process.Start(startInfo);
+                if (process != null)
+                {
+                    string output = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+
+                    // Parse for audio devices that can capture desktop audio
+                    // These include: VoiceMeeter Output, Stereo Mix, CABLE Output, etc.
+                    var lines = output.Split('\n');
+                    string? voiceMeeterDevice = null;
+                    string? stereoMixDevice = null;
+                    
+                    foreach (var line in lines)
+                    {
+                        string trimmedLine = line.Trim();
+                        
+                        if (trimmedLine.Contains("(audio)") && trimmedLine.Contains("\""))
+                        {
+                            int firstQuote = trimmedLine.IndexOf("\"");
+                            if (firstQuote >= 0)
+                            {
+                                int secondQuote = trimmedLine.IndexOf("\"", firstQuote + 1);
+                                if (secondQuote > firstQuote)
+                                {
+                                    string deviceName = trimmedLine.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
+                                    
+                                    // Check if this is a loopback/virtual audio device
+                                    string lowerName = deviceName.ToLower();
+                                    bool isLoopback = lowerName.Contains("voicemeeter output") ||
+                                                     lowerName.Contains("stereo mix") ||
+                                                     lowerName.Contains("cable output") ||
+                                                     lowerName.Contains("mezcla") ||
+                                                     lowerName.Contains("what u hear") ||
+                                                     lowerName.Contains("loopback");
+                                    
+                                    if (isLoopback && !AudioDevices.Contains(deviceName))
+                                    {
+                                        AudioDevices.Add(deviceName);
+                                        
+                                        // Track preferred devices for auto-selection
+                                        if (lowerName.Contains("voicemeeter output") && !lowerName.Contains("aux"))
+                                        {
+                                            voiceMeeterDevice = deviceName;
+                                        }
+                                        if (lowerName.Contains("stereo mix") || lowerName.Contains("mezcla"))
+                                        {
+                                            stereoMixDevice = deviceName;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Auto-select best available device
+                    string savedDevice = _settingsService.CurrentSettings.Audio.SelectedAudioDevice;
+                    if (!string.IsNullOrEmpty(savedDevice) && AudioDevices.Contains(savedDevice))
+                    {
+                        SelectedAudioDevice = savedDevice;
+                    }
+                    else if (voiceMeeterDevice != null)
+                    {
+                        SelectedAudioDevice = voiceMeeterDevice;
+                    }
+                    else if (stereoMixDevice != null)
+                    {
+                        SelectedAudioDevice = stereoMixDevice;
+                    }
+                    else if (AudioDevices.Count > 1)
+                    {
+                        SelectedAudioDevice = AudioDevices[1]; // First real device
+                    }
+                    else
+                    {
+                        SelectedAudioDevice = AudioDevices[0]; // Ninguno
+                    }
+                    
+                    Debug.WriteLine($"Audio devices loaded: {AudioDevices.Count}, Selected: {SelectedAudioDevice}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading audio devices: {ex.Message}");
+                SelectedAudioDevice = "Ninguno (sin audio de escritorio)";
+            }
         }
 
         private void LoadAvailableMicrophones()
@@ -110,91 +211,21 @@ namespace ClipStudioDesktop.ViewModels
             
             try
             {
-                string ffmpegPath = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
-                if (string.IsNullOrEmpty(ffmpegPath))
+                // Use NAudio to list audio capture devices (Wasapi)
+                using (var enumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator())
                 {
-                    Debug.WriteLine("FFmpeg no encontrado, usando micrófono predeterminado");
-                    return;
-                }
-
-                // Use FFmpeg to list audio input devices
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = "-list_devices true -f dshow -i dummy",
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    StandardErrorEncoding = System.Text.Encoding.UTF8,
-                    StandardOutputEncoding = System.Text.Encoding.UTF8
-                };
-
-                using var process = Process.Start(startInfo);
-                if (process != null)
-                {
-                    string output = process.StandardError.ReadToEnd();
-                    process.WaitForExit();
-
-                    Debug.WriteLine("=== FFmpeg Audio Devices Output ===");
-                    Debug.WriteLine(output);
-                    Debug.WriteLine("=== End FFmpeg Output ===");
-
-                    // Parse the output for audio input devices
-                    var lines = output.Split('\n');
-                    bool inAudioSection = false;
+                    var devices = enumerator.EnumerateAudioEndPoints(NAudio.CoreAudioApi.DataFlow.Capture, NAudio.CoreAudioApi.DeviceState.Active);
                     
-                    foreach (var line in lines)
+                    foreach (var device in devices)
                     {
-                        string trimmedLine = line.Trim();
-                        
-                        if (trimmedLine.Contains("DirectShow audio devices") || trimmedLine.Contains("dshow @ "))
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
-                            inAudioSection = true;
-                        }
-                        
-                        if (inAudioSection)
-                        {
-                            if (trimmedLine.Contains("DirectShow video devices"))
-                            {
-                                break; // End of audio section
-                            }
-                            
-                            // Look for lines with "(audio)" indicating audio devices
-                            // Format: [dshow @ ...] "Device Name" (audio)
-                            if (trimmedLine.Contains("(audio)") && trimmedLine.Contains("\""))
-                            {
-                                try
-                                {
-                                    // Extract first quoted string
-                                    int firstQuote = trimmedLine.IndexOf("\"");
-                                    if (firstQuote >= 0)
-                                    {
-                                        int secondQuote = trimmedLine.IndexOf("\"", firstQuote + 1);
-                                        if (secondQuote > firstQuote)
-                                        {
-                                            string deviceName = trimmedLine.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
-                                            
-                                            // Avoid duplicates
-                                            if (!string.IsNullOrWhiteSpace(deviceName) && 
-                                                !AvailableMicrophones.Any(m => m.DeviceName == deviceName))
-                                            {
-                                                AvailableMicrophones.Add(new MicrophoneDevice
-                                                {
-                                                    DisplayName = deviceName,
-                                                    DeviceName = deviceName
-                                                });
-                                                Debug.WriteLine($"Found microphone: {deviceName}");
-                                            }
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine($"Error parsing line: {trimmedLine} - {ex.Message}");
-                                }
-                            }
-                        }
+                            AvailableMicrophones.Add(new MicrophoneDevice 
+                            { 
+                                DisplayName = device.FriendlyName, 
+                                DeviceName = device.ID 
+                            });
+                        });
                     }
                 }
                 
@@ -259,16 +290,7 @@ namespace ClipStudioDesktop.ViewModels
                 long bufferSize = GetDirectorySize(bufferPath);
                 BufferSizeText = $"{bufferSize / 1024 / 1024} MB (Disco)";
                 
-                // Contar segmentos de audio
-                string audioPath = Path.Combine(bufferPath, "audio");
-                int audioSegments = 0;
-                if (Directory.Exists(audioPath))
-                {
-                    audioSegments = Directory.GetFiles(audioPath, "*.raw").Length;
-                }
-                AudioSegmentsText = audioSegments.ToString();
-                
-                // Contar segmentos de video
+                // Contar segmentos de video (audio está incluido en los segmentos de video)
                 string videoPath = Path.Combine(bufferPath, "video");
                 int videoSegments = 0;
                 if (Directory.Exists(videoPath))
@@ -276,6 +298,10 @@ namespace ClipStudioDesktop.ViewModels
                     videoSegments = Directory.GetFiles(videoPath, "*.mp4").Length;
                 }
                 VideoSegmentsText = videoSegments.ToString();
+                
+                // Audio está integrado en los segmentos de video
+                AudioSegmentsText = videoSegments > 0 ? $"{videoSegments} (en video)" : "0";
+
                 
                 // Calcular espacio reservado restante
                 long reservedSize = ClipStudioDesktop.Services.Storage.DiskSpaceReservation.GetCurrentReservationSize(bufferPath);
