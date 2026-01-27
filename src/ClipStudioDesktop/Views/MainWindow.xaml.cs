@@ -17,6 +17,57 @@ namespace ClipStudioDesktop.Views
         {
             InitializeComponent();
             DataContext = viewModel;
+
+            // Ensure the window centers on the primary monitor every time it becomes visible
+            this.IsVisibleChanged += (s, e) =>
+            {
+                if ((bool)e.NewValue)
+                {
+                    CenterOnPrimaryMonitor();
+                }
+            };
+
+            // Handle PreviewKeyDown at window level to disable ALT key default behavior (AccessKeys)
+            this.PreviewKeyDown += (s, e) =>
+            {
+                // If ALT is pressed (System key)
+                if (e.Key == System.Windows.Input.Key.System && 
+                    (e.SystemKey == System.Windows.Input.Key.LeftAlt || e.SystemKey == System.Windows.Input.Key.RightAlt || e.SystemKey == System.Windows.Input.Key.F10))
+                {
+                    // Check if focus is on a HotkeyTextBox. If so, let it pass so the user can record "Alt+..."
+                    var focusedElement = System.Windows.Input.Keyboard.FocusedElement as System.Windows.Controls.TextBox;
+                    if (focusedElement != null && focusedElement.Name != null && focusedElement.Name.Contains("HotkeyTextBox"))
+                    {
+                        return;
+                    }
+
+                    // Otherwise, swallow the key to prevent Windows from focusing the menu/access keys
+                    e.Handled = true;
+                }
+            };
+        }
+
+        private void CenterOnPrimaryMonitor()
+        {
+            try
+            {
+                double screenWidth = SystemParameters.WorkArea.Width;
+                double screenHeight = SystemParameters.WorkArea.Height;
+                double windowWidth = this.ActualWidth;
+                double windowHeight = this.ActualHeight;
+
+                // If ActualWidth is 0 (first load), use Width/Height from XAML
+                if (windowWidth == 0) windowWidth = this.Width;
+                if (windowHeight == 0) windowHeight = this.Height;
+
+                this.Left = (screenWidth / 2) - (windowWidth / 2);
+                this.Top = (screenHeight / 2) - (windowHeight / 2);
+            }
+            catch
+            {
+                // Fallback to center screen behavior if calculation fails
+                this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -60,6 +111,15 @@ namespace ClipStudioDesktop.Views
             
             textBox.Foreground = (System.Windows.Media.Brush)FindResource("TextBrush");
             textBox.Tag = null; // Reset tag
+        }
+
+        private void HotkeyTextBox_Loaded(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox == null) return;
+            
+            // Auto-focus when editing starts
+            textBox.Focus();
         }
 
         private void HotkeyTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)

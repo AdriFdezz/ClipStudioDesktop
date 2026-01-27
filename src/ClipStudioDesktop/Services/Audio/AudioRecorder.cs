@@ -24,36 +24,28 @@ namespace ClipStudioDesktop.Services.Audio
         private string? _currentChunkPath;
         private readonly List<string> _chunks = new List<string>();
         private readonly object _lock = new object();
-        private int _bytesPerChunk;
-        private long _maxBytesTotal;
+
+
         private long _currentTotalBytes;
-        private long _lastReservationUpdateSize = 0; // Último tamaño cuando se actualizó la reserva
-        private const long RESERVATION_UPDATE_THRESHOLD = 100 * 1024 * 1024; // 100MB
+
 
         public AudioRecorder(AppSettings settings)
         {
             _settings = settings;
-            _bufferRootPath = _settings.Paths.TempBuffer;
+            _bufferRootPath = _settings.Paths.Cache;
             _bufferFolder = Path.Combine(_bufferRootPath, "audio");
         }
 
-        public bool Start()
+        public bool Start(string outputFilePath)
         {
             if (_isRecording) return true;
 
             try 
             {
                 Directory.CreateDirectory(_bufferFolder);
-                // Clean old buffer files
-                foreach (var file in Directory.GetFiles(_bufferFolder, "*.raw"))
-                {
-                    try { File.Delete(file); } catch { }
-                }
-                _chunks.Clear();
                 _currentTotalBytes = 0;
+                _currentChunkPath = outputFilePath;
 
-                // Capture system audio (loopback)
-                // NOTE: This requires a valid audio device to be active
                 try 
                 {
                     _capture = new WasapiLoopbackCapture();
@@ -61,21 +53,15 @@ namespace ClipStudioDesktop.Services.Audio
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Failed to initialize WasapiLoopbackCapture: {ex.Message}");
-                    // If loopback fails (e.g. no audio playing), we can't record audio
-                    // But we shouldn't crash the app.
                     return false;
                 }
 
                 if (_capture == null) return false;
 
                 _waveFormat = _capture.WaveFormat;
-
-                // Calculate buffer settings
-                int bytesPerSecond = _waveFormat.AverageBytesPerSecond;
-                _bytesPerChunk = bytesPerSecond * 30; // 30 seconds per chunk (igual que video)
-                _maxBytesTotal = _settings.Buffer.MaxBufferBytes / 2; // Mitad del buffer para audio
-
-                StartNewChunk();
+                
+                // Direct stream to the output file
+                _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
 
                 _capture.DataAvailable += OnDataAvailable;
                 _capture.RecordingStopped += OnRecordingStopped;
@@ -100,6 +86,7 @@ namespace ClipStudioDesktop.Services.Audio
             
             lock (_lock)
             {
+                _currentChunkStream?.Flush();
                 _currentChunkStream?.Dispose();
                 _currentChunkStream = null;
             }
@@ -114,203 +101,50 @@ namespace ClipStudioDesktop.Services.Audio
                 if (_currentChunkStream != null)
                 {
                     _currentChunkStream.Write(e.Buffer, 0, e.BytesRecorded);
-                    
-                    if (_currentChunkStream.Length >= _bytesPerChunk)
-                    {
-                        StartNewChunk();
-                    }
+                    _currentTotalBytes += e.BytesRecorded;
                 }
             }
-        }
-
-        private void StartNewChunk()
-        {
-            if (_currentChunkStream != null)
-            {
-                long length = _currentChunkStream.Length;
-                _currentChunkStream.Flush();
-                _currentChunkStream.Dispose();
-                
-                if (_currentChunkPath != null)
-                {
-                    _chunks.Add(_currentChunkPath);
-                    _currentTotalBytes += length;
-                }
-            }
-
-            // Limpieza: mantener máximo 7 chunks (3 minutos 30 segundos = 210 segundos / 30 segundos por chunk)
-            // Una vez alcanzado este límite, eliminar el más antiguo
-            int maxChunksToKeep = 7;
-            
-            while (_chunks.Count >= maxChunksToKeep)
-            {
-                var oldChunk = _chunks[0];
-                _chunks.RemoveAt(0);
-                try 
-                { 
-                    var fi = new FileInfo(oldChunk);
-                    if (fi.Exists)
-                    {
-                        _currentTotalBytes -= fi.Length;
-                        fi.Delete();
-                        Debug.WriteLine($"AudioRecorder: Chunk eliminado (límite de cantidad): {Path.GetFileName(oldChunk)}");
-                    }
-                } 
-                catch { /* Ignore if in use */ }
-            }
-
-            // Limpieza adicional por tamaño total si excede el límite
-            while (_currentTotalBytes > _maxBytesTotal && _chunks.Count > 0)
-            {
-                var oldChunk = _chunks[0];
-                _chunks.RemoveAt(0);
-                try 
-                { 
-                    var fi = new FileInfo(oldChunk);
-                    if (fi.Exists)
-                    {
-                        _currentTotalBytes -= fi.Length;
-                        fi.Delete();
-                        Debug.WriteLine($"AudioRecorder: Chunk eliminado (límite de tamaño): {Path.GetFileName(oldChunk)}");
-                    }
-                } 
-                catch { /* Ignore if in use */ }
-            }
-
-            // Actualizar la reserva de espacio en disco dinámicamente (solo cada 100MB)
-            try
-            {
-                long currentBufferSize = Storage.DiskSpaceReservation.CalculateBufferSize(_bufferRootPath);
-                if (Math.Abs(currentBufferSize - _lastReservationUpdateSize) >= RESERVATION_UPDATE_THRESHOLD)
-                {
-                    Storage.DiskSpaceReservation.UpdateReservation(_bufferRootPath, _settings.Buffer.MaxBufferBytes);
-                    _lastReservationUpdateSize = currentBufferSize;
-                    Debug.WriteLine($"AudioRecorder: Reserva actualizada. Buffer: {currentBufferSize / 1024 / 1024}MB");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"AudioRecorder: Error al actualizar reserva: {ex.Message}");
-            }
-
-            _currentChunkPath = Path.Combine(_bufferFolder, $"audio_{DateTime.Now.Ticks}.raw");
-            _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)
         {
-            _capture?.Dispose();
-            _capture = null;
-            lock (_lock)
+            _isRecording = false;
+            if (e.Exception != null)
             {
-                _currentChunkStream?.Dispose();
-                _currentChunkStream = null;
+                System.Diagnostics.Debug.WriteLine($"Audio recording stopped with error: {e.Exception.Message}");
             }
         }
-
-        public string? SaveClip(int durationSeconds, string outputFolder)
+        
+        // Helper to convert the raw PCM/WAV we just recorded to final format if needed
+        // Assuming we record RAW PCM or WAV headerless, we might need to finalize it.
+        // NAudio WasapiLoopbackCapture gives raw PCM in DataAvailable.
+        // If we write directly to .wav, we need a header. 
+        // For now, let's stick to writing raw samples and then converting with FFmpeg as before, 
+        // OR better: write a proper WAV file using WaveFileWriter if possible, but we are manually writing stream.
+        // Let's keep the raw writing and reuse ConvertRawToOutput logic which is robust.
+        
+        public string? FinalizeRecording(string finalOutputFolder, string format)
         {
-            if (!_isRecording || _waveFormat == null) 
-            {
-                throw new InvalidOperationException("El grabador de audio no está activo o no se ha inicializado correctamente.");
-            }
+             if (_currentChunkPath == null || !File.Exists(_currentChunkPath)) return null;
 
-            string? tempRawFile = null;
-            string? trimmedRawFile = null;
-            try
-            {
-                List<string> filesToProcess;
-                lock (_lock)
-                {
-                    if (_currentChunkStream != null) _currentChunkStream.Flush();
-                    
-                    // Calculate how many chunks we need (each chunk is 30 seconds)
-                    int chunksNeeded = (int)Math.Ceiling(durationSeconds / 30.0);
-                    
-                    // Take LAST N chunks (most recent) instead of all chunks
-                    filesToProcess = _chunks.TakeLast(chunksNeeded).ToList();
-                    if (_currentChunkPath != null) filesToProcess.Add(_currentChunkPath);
-                }
+             try
+             {
+                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                string extension = format.ToLower() == "wav" ? "wav" : "mp3";
+                string outputFile = Path.Combine(finalOutputFolder, $"recording_audio_{timestamp}.{extension}");
 
-                if (filesToProcess.Count == 0) 
-                {
-                    throw new InvalidOperationException("No hay datos de audio en el buffer. Espera unos segundos después de activar la grabación.");
-                }
-
-                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff");
-                tempRawFile = Path.Combine(outputFolder, $"temp_audio_full_{timestamp}.raw");
-                trimmedRawFile = Path.Combine(outputFolder, $"temp_audio_trimmed_{timestamp}.raw");
-
-                // Concatenate all chunks
-                using (var outputStream = new FileStream(tempRawFile, FileMode.Create))
-                {
-                    foreach (var file in filesToProcess)
-                    {
-                        try
-                        {
-                            using (var inputStream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                            {
-                                inputStream.CopyTo(outputStream);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Skipping chunk {file}: {ex.Message}");
-                        }
-                    }
-                }
-
-                long fullFileSize = new FileInfo(tempRawFile).Length;
-                if (fullFileSize == 0)
-                {
-                    throw new InvalidOperationException("El archivo de audio está vacío. No se pudo capturar audio del sistema.");
-                }
-
-                // Calculate bytes to extract
-                int bytesPerSample = _waveFormat.BitsPerSample / 8;
-                int bytesPerSecond = _waveFormat.SampleRate * _waveFormat.Channels * bytesPerSample;
-                long bytesToExtract = (long)durationSeconds * bytesPerSecond;
-                long startPosition = Math.Max(0, fullFileSize - bytesToExtract);
-
-                System.Diagnostics.Debug.WriteLine($"Audio: fileSize={fullFileSize}, bytesPerSec={bytesPerSecond}, extracting {bytesToExtract} bytes from position {startPosition}");
-
-                // Extract last N seconds by copying bytes directly
-                using (var inputStream = new FileStream(tempRawFile, FileMode.Open, FileAccess.Read))
-                using (var outputStream = new FileStream(trimmedRawFile, FileMode.Create))
-                {
-                    inputStream.Seek(startPosition, SeekOrigin.Begin);
-                    inputStream.CopyTo(outputStream);
-                }
-
-                string format = _settings.Audio.Format.ToLower();
-                string extension = format; // mp3 or flac
-                string outputFile = Path.Combine(outputFolder, $"clip_{timestamp}.{extension}");
-
-                ConvertRawToOutput(trimmedRawFile, outputFile, format);
+                ConvertRawToOutput(_currentChunkPath, outputFile, format);
                 
-                if (File.Exists(outputFile))
-                {
-                    return outputFile;
-                }
+                // Cleanup temp raw file
+                try { File.Delete(_currentChunkPath); } catch { }
                 
-                throw new InvalidOperationException("FFmpeg no pudo crear el archivo de salida.");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error saving audio clip: {ex.Message}");
-                throw;
-            }
-            finally
-            {
-                if (tempRawFile != null)
-                {
-                    try { File.Delete(tempRawFile); } catch { }
-                }
-                if (trimmedRawFile != null)
-                {
-                    try { File.Delete(trimmedRawFile); } catch { }
-                }
-            }
+                return outputFile;
+             }
+             catch (Exception ex)
+             {
+                 Debug.WriteLine($"Error finalizing audio: {ex.Message}");
+                 return null;
+             }
         }
 
         private void ConvertRawToOutput(string inputFile, string outputFile, string format)

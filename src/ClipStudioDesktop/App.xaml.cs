@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -30,17 +31,38 @@ namespace ClipStudioDesktop
         private Views.MainWindow _mainWindow = null!;
         // We need a window to attach hotkeys to, even if hidden
         private Window _messageWindow = null!;
+        private string? _lastSavedFilePath;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             // Single instance check
+            // Single instance check with Retry for Auto-Restart
             const string mutexName = "ClipStudioDesktop_SingleInstance_Mutex";
-            _mutex = new Mutex(true, mutexName, out bool createdNew);
+            bool createdNew = false;
             
-            if (!createdNew)
+            for (int i = 0; i < 10; i++) // Try for up to 2 seconds (10 * 200ms)
+            {
+                try
+                {
+                    _mutex = new Mutex(true, mutexName, out createdNew);
+                    if (createdNew) break;
+                    
+                    // If mutex exists but belongs to another process, dispose our handle and wait
+                    _mutex.Dispose();
+                    _mutex = null;
+                    System.Threading.Thread.Sleep(200);
+                }
+                catch
+                {
+                   System.Threading.Thread.Sleep(200);
+                }
+            }
+
+            if (_mutex == null || !createdNew)
             {
                 // Ya hay una instancia ejecutándose
-                System.Windows.MessageBox.Show("Clip Studio Desktop ya está en ejecución.", "Aplicación ya iniciada", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                // Don't show message box on silent failures/restarts if desirable, but keeping it for now
+                // System.Windows.MessageBox.Show("Clip Studio Desktop ya está en ejecución.", "Aplicación ya iniciada", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                 Shutdown();
                 return;
             }
@@ -71,7 +93,7 @@ namespace ClipStudioDesktop
             _hotKeyService = new HotKeyService();
             _storageService = new StorageService(_settingsService);
             _recordingService = new RecordingService(_settingsService, _storageService);
-            _screenshotService = new ScreenshotService(_storageService, _settingsService);
+            _screenshotService = new ScreenshotService(_storageService, _settingsService, _hotKeyService);
 
             // Apply Startup Setting
             StartupHelper.SetStartup(_settingsService.CurrentSettings.General.StartWithWindows);
@@ -79,6 +101,7 @@ namespace ClipStudioDesktop
             // Initialize ViewModel and Window
             _mainViewModel = new MainViewModel(_settingsService, _storageService, _recordingService);
             _mainWindow = new Views.MainWindow(_mainViewModel);
+            _mainWindow.Show();
 
             // Ensure directories
             _storageService.EnsureDirectoriesExist();
@@ -123,20 +146,64 @@ namespace ClipStudioDesktop
                 _taskbarIcon.Icon = SystemIcons.Application;
             }
 
+            _taskbarIcon.TrayBalloonTipClicked += async (s, args) =>
+            {
+                if (!string.IsNullOrEmpty(_lastSavedFilePath) && System.IO.File.Exists(_lastSavedFilePath))
+                {
+                    await Task.Delay(100); // Tiny delay for visual smoothness
+                    ShowFileInExplorer(_lastSavedFilePath);
+                }
+            };
+
             // Create Context Menu
             var contextMenu = new System.Windows.Controls.ContextMenu();
 
-            // Pause/Resume
-            var toggleItem = new System.Windows.Controls.MenuItem();
-            toggleItem.Header = _recordingService.IsRecording ? "Pausar Grabación" : "Iniciar Grabación";
+            // Video Recording
+            var videoItem = new System.Windows.Controls.MenuItem();
+            videoItem.Header = "Grabar Video";
             
-            // Subscribe to state changes to keep menu in sync
+            // Audio Recording
+            var audioItem = new System.Windows.Controls.MenuItem();
+            audioItem.Header = "Grabar Audio";
+
+            // Local Helper to update menu state
+            void UpdateMenuState(bool isRecording)
+            {
+                bool isVideoMode = _recordingService.IsVideoMode;
+                
+                if (!isRecording)
+                {
+                    videoItem.Header = "Grabar Video";
+                    videoItem.IsEnabled = true;
+                    
+                    audioItem.Header = "Grabar Audio";
+                    audioItem.IsEnabled = true;
+                }
+                else
+                {
+                    if (isVideoMode)
+                    {
+                        videoItem.Header = "Detener Video";
+                        videoItem.IsEnabled = true;
+                        
+                        audioItem.Header = "Grabar Audio";
+                        audioItem.IsEnabled = false; // Mutually exclusive
+                    }
+                    else
+                    {
+                        videoItem.Header = "Grabar Video";
+                        videoItem.IsEnabled = false; // Mutually exclusive
+                        
+                        audioItem.Header = "Detener Audio";
+                        audioItem.IsEnabled = true;
+                    }
+                }
+            }
+
+            // Subscribe to state changes
             _recordingService.RecordingStateChanged += (s, isRecording) => 
             {
-                this.Dispatcher.Invoke(() => 
-                {
-                    toggleItem.Header = isRecording ? "Pausar Grabación" : "Iniciar Grabación";
-                });
+                this.Dispatcher.Invoke(() => UpdateMenuState(isRecording));
             };
 
             // Subscribe to ClipSaved event
@@ -144,22 +211,47 @@ namespace ClipStudioDesktop
             {
                 this.Dispatcher.Invoke(() =>
                 {
-                    ShowNotification("Clip Guardado", $"Clip guardado exitosamente:\n{System.IO.Path.GetFileName(path)}");
+                    string fileName = System.IO.Path.GetFileName(path);
+                    string title = "Clip Guardado";
+                    
+                    if (fileName.Contains("Audio")) title = "Clip De Audio Guardado";
+                    else if (fileName.Contains("Video")) title = "Clip De Video Guardado";
+
+                    ShowNotification(title, $"Clip guardado exitosamente:\n{fileName}", path);
                 });
             };
 
-            toggleItem.Click += async (s, args) => 
+            // Subscribe to ScreenshotSaved event
+            _screenshotService.ScreenshotSaved += (s, path) =>
             {
-                if (_recordingService.IsRecording)
+                this.Dispatcher.Invoke(() =>
                 {
-                    await _recordingService.StopRecordingAsync();
-                }
-                else
-                {
-                    await _recordingService.StartRecordingAsync();
-                }
+                    string fileName = System.IO.Path.GetFileName(path);
+                    string title = "Captura Guardada";
+
+                    if (fileName.Contains("Completa")) title = "Captura De Pantalla Guardada";
+                    else if (fileName.Contains("Seleccion")) title = "Captura De Seleccion Guardada";
+
+                    ShowNotification(title, $"Captura guardada exitosamente:\n{fileName}", path);
+                });
             };
-            contextMenu.Items.Add(toggleItem);
+
+            // Click Handlers
+            videoItem.Click += async (s, args) => 
+            {
+                await _recordingService.ToggleRecordingAsync(videoEnabled: true);
+            };
+            
+            audioItem.Click += async (s, args) => 
+            {
+                await _recordingService.ToggleRecordingAsync(videoEnabled: false);
+            };
+
+            // Initial State
+            UpdateMenuState(_recordingService.IsRecording);
+
+            contextMenu.Items.Add(videoItem);
+            contextMenu.Items.Add(audioItem);
 
             // Open Folders
             var openFoldersItem = new System.Windows.Controls.MenuItem();
@@ -206,61 +298,19 @@ namespace ClipStudioDesktop
                 {
                     _hotKeyService.RegisterHotKey(hotkey.Key, async () => 
                     {
-                        // Show processing window for clips
-                        Views.ProcessingWindow? processingWindow = null;
-                        if (hotkey.Type == "audio" || hotkey.Type == "video")
-                        {
-                            if (!_recordingService.IsRecording)
-                            {
-                                System.Windows.MessageBox.Show("La grabación no está activa. Actívela desde el menú de estado o la bandeja del sistema.", "Grabación Inactiva", MessageBoxButton.OK, MessageBoxImage.Warning);
-                                return;
-                            }
-
-                            // Ensure UI thread
-                            System.Windows.Application.Current.Dispatcher.Invoke(() => 
-                            {
-                                processingWindow = new Views.ProcessingWindow();
-                                processingWindow.Show();
-                            });
-                        }
-
                         try
                         {
-                            System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Starting SaveClipAsync - Type: {hotkey.Type}, Duration: {hotkey.Duration}s");
-                            
                             if (hotkey.Type == "audio")
                             {
-                                var saveTask = _recordingService.SaveClipAsync(hotkey.Duration, false);
-                                var timeoutTask = System.Threading.Tasks.Task.Delay(30000); // 30 second timeout
-                                var completedTask = await System.Threading.Tasks.Task.WhenAny(saveTask, timeoutTask);
-                                
-                                if (completedTask == timeoutTask)
-                                {
-                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Audio SaveClipAsync TIMEOUT");
-                                    System.Windows.MessageBox.Show("El guardado de audio tardó demasiado y se canceló.", "Timeout", MessageBoxButton.OK, MessageBoxImage.Warning);
-                                }
-                                else
-                                {
-                                    await saveTask; // Re-await to get exceptions
-                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Audio SaveClipAsync completed");
-                                }
+                                await _recordingService.ToggleRecordingAsync(false);
                             }
                             else if (hotkey.Type == "video")
                             {
-                                var saveTask = _recordingService.SaveClipAsync(hotkey.Duration, true);
-                                var timeoutTask = System.Threading.Tasks.Task.Delay(30000); // 30 second timeout
-                                var completedTask = await System.Threading.Tasks.Task.WhenAny(saveTask, timeoutTask);
-                                
-                                if (completedTask == timeoutTask)
-                                {
-                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Video SaveClipAsync TIMEOUT");
-                                    System.Windows.MessageBox.Show("El guardado de video tardó demasiado y se canceló.", "Timeout", MessageBoxButton.OK, MessageBoxImage.Warning);
-                                }
-                                else
-                                {
-                                    await saveTask; // Re-await to get exceptions
-                                    System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Video SaveClipAsync completed");
-                                }
+                                await _recordingService.ToggleRecordingAsync(true);
+                            }
+                            else if (hotkey.Type == "recording")
+                            {
+                                await _recordingService.ToggleRecordingAsync(true);
                             }
                             else if (hotkey.Type == "screenshot")
                             {
@@ -289,27 +339,6 @@ namespace ClipStudioDesktop
                             System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Exception in hotkey handler: {ex.Message}\n{ex.StackTrace}");
                             System.Windows.MessageBox.Show($"Error al ejecutar atajo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
-                        finally
-                        {
-                            System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Entering finally block");
-                            if (processingWindow != null)
-                            {
-                                try
-                                {
-                                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                                    {
-                                        System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Closing ProcessingWindow");
-                                        processingWindow.Close();
-                                        System.Diagnostics.Debug.WriteLine("[App.xaml.cs] ProcessingWindow closed successfully");
-                                    });
-                                }
-                                catch (Exception closeEx)
-                                {
-                                    System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Error closing window: {closeEx.Message}");
-                                }
-                            }
-                            System.Diagnostics.Debug.WriteLine("[App.xaml.cs] Finally block completed");
-                        }
                     });
                     successCount++;
                 }
@@ -324,10 +353,11 @@ namespace ClipStudioDesktop
             System.Diagnostics.Debug.WriteLine($"Hotkeys registered: {successCount} success, {failCount} failed");
         }
 
-        private void ShowNotification(string title, string message)
+        private void ShowNotification(string title, string message, string? filePath = null)
         {
             if (_settingsService.CurrentSettings.General.ShowNotifications && _taskbarIcon != null)
             {
+                _lastSavedFilePath = filePath;
                 _taskbarIcon.ShowBalloonTip(title, message, BalloonIcon.Info);
             }
         }
@@ -370,6 +400,35 @@ namespace ClipStudioDesktop
                 });
             }
         }
+
+        #region Shell API for Smooth Explorer Transition
+        [DllImport("shell32.dll", ExactSpelling = true)]
+        private static extern int SHOpenFolderAndSelectItems(IntPtr pidlFolder, uint cidl, IntPtr apidl, uint dwFlags);
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr ILCreateFromPath(string pszPath);
+
+        [DllImport("shell32.dll")]
+        private static extern void ILFree(IntPtr pidl);
+
+        private void ShowFileInExplorer(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath)) return;
+
+            IntPtr pidl = ILCreateFromPath(filePath);
+            if (pidl != IntPtr.Zero)
+            {
+                try
+                {
+                    SHOpenFolderAndSelectItems(pidl, 0, IntPtr.Zero, 0);
+                }
+                finally
+                {
+                    ILFree(pidl);
+                }
+            }
+        }
+        #endregion
 
         protected override void OnExit(ExitEventArgs e)
         {

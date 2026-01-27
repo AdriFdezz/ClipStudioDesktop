@@ -6,10 +6,13 @@ namespace ClipStudioDesktop.Services.Recording
     public interface IRecordingService : IDisposable
     {
         bool IsRecording { get; }
+        bool IsVideoMode { get; }
         event EventHandler<bool> RecordingStateChanged;
         event EventHandler<string> ClipSaved;
-        Task StartRecordingAsync();
+        event EventHandler<(long Estimated, long Physical)> BufferSizeChanged;
+        Task StartRecordingAsync(bool videoEnabled = true);
         Task StopRecordingAsync();
+        Task ToggleRecordingAsync(bool videoEnabled = true);
         Task SaveClipAsync(int durationSeconds, bool isVideo);
         void ClearBuffer();
         void UpdateBufferReservation();

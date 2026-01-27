@@ -55,7 +55,7 @@
                     </Path.Data>
                 </Path>
                 <!-- Core (White) -->
-                <Path Stroke="White" StrokeThickness="1">
+                <Path Stroke="White" StrokeThickness="2">
                     <Path.Data>
                         <GeometryGroup>
                             <LineGeometry StartPoint="-10,0" EndPoint="10,0"/>

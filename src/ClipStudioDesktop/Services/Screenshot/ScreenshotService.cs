@@ -16,11 +16,13 @@ namespace ClipStudioDesktop.Services.Screenshot
     {
         private readonly IStorageService _storageService;
         private readonly ISettingsService _settingsService;
+        private readonly Services.Hotkeys.IHotKeyService _hotKeyService;
 
-        public ScreenshotService(IStorageService storageService, ISettingsService settingsService)
+        public ScreenshotService(IStorageService storageService, ISettingsService settingsService, Services.Hotkeys.IHotKeyService hotKeyService)
         {
             _storageService = storageService;
             _settingsService = settingsService;
+            _hotKeyService = hotKeyService;
         }
 
         public Task CaptureFullScreenAsync()
@@ -82,7 +84,7 @@ namespace ClipStudioDesktop.Services.Screenshot
                         g.CopyFromScreen(x, y, 0, 0, bitmap.Size);
                     }
 
-                    SaveScreenshot(bitmap);
+                    SaveScreenshot(bitmap, "Captura_Pantalla_Completa");
                 }
             }
             catch (Exception ex)
@@ -133,6 +135,8 @@ namespace ClipStudioDesktop.Services.Screenshot
                     DeleteObject(hBitmap);
                 }
 
+                if (_hotKeyService != null) _hotKeyService.IsSuspended = true;
+
                 // 2. Show Selection Window
                 // Must run on UI thread
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
@@ -157,7 +161,7 @@ namespace ClipStudioDesktop.Services.Screenshot
                         {
                             if (saveToFile)
                             {
-                                SaveScreenshot(cropped);
+                                SaveScreenshot(cropped, "Captura_de_Seleccion");
                             }
                             else
                             {
@@ -173,6 +177,10 @@ namespace ClipStudioDesktop.Services.Screenshot
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error capturing selection: {ex.Message}");
+            }
+            finally
+            {
+                 if (_hotKeyService != null) _hotKeyService.IsSuspended = false;
             }
             return success;
         }
@@ -204,21 +212,59 @@ namespace ClipStudioDesktop.Services.Screenshot
             }
         }
 
-        private void SaveScreenshot(Bitmap bitmap)
+        public event EventHandler<string>? ScreenshotSaved;
+
+        private void SaveScreenshot(Bitmap bitmap, string prefix)
         {
             string folder = _storageService.GetImageFolder();
             _storageService.EnsureDirectoriesExist();
 
-            string fileName = $"screenshot_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.png";
+            string format = _settingsService.CurrentSettings.Screenshot.Format.ToLower();
+            string extension = format == "jpg" ? "jpg" : "png";
+            
+            string fileName = $"{prefix}_{DateTime.Now:dd_MM_yyyy_HH_mm_ss}.{extension}";
             string filePath = Path.Combine(folder, fileName);
 
-            bitmap.Save(filePath, ImageFormat.Png);
+            if (format == "jpg")
+            {
+                var encoder = GetEncoder(ImageFormat.Jpeg);
+                if (encoder != null)
+                {
+                    var encoderParameters = new EncoderParameters(1);
+                    encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 100L); // Max quality hardcoded
+                    bitmap.Save(filePath, encoder, encoderParameters);
+                }
+                else
+                {
+                    bitmap.Save(filePath, ImageFormat.Jpeg);
+                }
+            }
+            else
+            {
+                bitmap.Save(filePath, ImageFormat.Png);
+            }
 
             PlayShutterSound();
+            ScreenshotSaved?.Invoke(this, filePath);
+        }
+
+        private ImageCodecInfo? GetEncoder(ImageFormat format)
+        {
+            ImageCodecInfo[] codecs = ImageCodecInfo.GetImageEncoders();
+            foreach (ImageCodecInfo codec in codecs)
+            {
+                if (codec.FormatID == format.Guid)
+                {
+                    return codec;
+                }
+            }
+            return null;
         }
 
         private void PlayShutterSound()
         {
+            if (!_settingsService.CurrentSettings.General.PlaySoundOnClip) return;
+
             try
             {
                 // Try to find a shutter sound in Windows Media folder

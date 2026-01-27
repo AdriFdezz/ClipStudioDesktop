@@ -23,57 +23,72 @@ namespace ClipStudioDesktop.Services.Audio
         private FileStream? _currentChunkStream;
         private string? _currentChunkPath;
         private readonly List<string> _chunks = new List<string>();
-        private readonly object _lock = new object();
-        private int _bytesPerChunk;
-        
+        private readonly object _lock = new object();        
         public MicrophoneRecorder(AppSettings settings)
         {
             _settings = settings;
             // Use a separate folder for microphone buffer
-            _bufferFolder = Path.Combine(_settings.Paths.TempBuffer, "mic");
+            _bufferFolder = Path.Combine(_settings.Paths.Cache, "mic");
         }
 
-        public bool Start()
+        public bool Start(string outputFilePath)
         {
             if (_isRecording) return true;
             if (!_settings.Audio.EnableMicrophone) return false;
 
             _selectedDeviceId = _settings.Audio.SelectedMicrophone;
+            _currentChunkPath = outputFilePath;
 
             try 
             {
-                Directory.CreateDirectory(_bufferFolder);
-                // Clean old buffer files
-                foreach (var file in Directory.GetFiles(_bufferFolder, "*.raw"))
-                {
-                    try { File.Delete(file); } catch { }
-                }
-                _chunks.Clear();
-
+                Directory.CreateDirectory(Path.GetDirectoryName(outputFilePath)!);
+                
                 // Initialize Capture
                 if (string.IsNullOrEmpty(_selectedDeviceId))
                 {
-                    // Default device
                     _capture = new WasapiCapture();
                 }
                 else
                 {
-                    // Specific device by ID
-                    var enumerator = new MMDeviceEnumerator();
-                    var device = enumerator.GetDevice(_selectedDeviceId);
-                    _capture = new WasapiCapture(device);
+                     try
+                     {
+                        var enumerator = new MMDeviceEnumerator();
+                        var device = enumerator.GetDevice(_selectedDeviceId);
+                        _capture = new WasapiCapture(device);
+                     }
+                     catch
+                     {
+                        // Fallback to default
+                        _capture = new WasapiCapture();
+                     }
                 }
 
                 if (_capture == null) return false;
 
                 _waveFormat = _capture.WaveFormat;
-
-                // Calculate buffer settings
-                int bytesPerSecond = _waveFormat.AverageBytesPerSecond;
-                _bytesPerChunk = bytesPerSecond * 30; // 30 seconds per chunk
-
-                StartNewChunk();
-
+                
+                // Direct stream
+                _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                
+                // Write WAV Header placeholder (44 bytes) for Mic if we want standard WAV, 
+                // BUT WasapiCapture gives RAW data. 
+                // Since our merge logic expects inputs, maybe simpler to just write raw and let merge handle it if we know format?
+                // Actually, WasapiCapture is float or PCM.
+                // Let's stick to RAW and we already handle raw->wav conversion in Finalize or Merge?
+                // The RecordingService expects this to produce a File. 
+                // Since this class is simple, let's just write raw data 
+                // AND since RecordingService.MergeFiles expects inputs, raw files work if we specify parameters.
+                // However, MergeFiles in RecordingService uses simple "-i file". Inputting raw data with just "-i" often fails without -f s16le etc.
+                // So we SHOULD probably produce a WAV header or convert it later.
+                // Let's write RAW and let the caller or finalizer handle it. 
+                // BUT wait, RecordingService merges "finalAudio" (converted to WAV) for Desktop Audio,
+                // but for Mic it takes `_currentMicFile` directly. 
+                // So `_currentMicFile` MUST be a valid container OR we need to convert it.
+                // I will update this class to just Write RAW, and I will manually add a method "StopAndConvert" or similar?
+                // Actually, `RecordingService` does NOT convert Mic file currently. It passes it to MergeFiles.
+                // MergeFiles uses "-i {mic}". If it's raw, it might fail.
+                // I should replicate the "FinalizeRecording" pattern from AudioRecorder here.
+                
                 _capture.DataAvailable += OnDataAvailable;
                 _capture.RecordingStopped += OnRecordingStopped;
 
@@ -84,7 +99,6 @@ namespace ClipStudioDesktop.Services.Audio
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error starting mic recording: {ex.Message}");
-                // Fallback to default if specific fails?
                 return false;
             }
         }
@@ -98,6 +112,7 @@ namespace ClipStudioDesktop.Services.Audio
             
             lock (_lock)
             {
+                _currentChunkStream?.Flush();
                 _currentChunkStream?.Dispose();
                 _currentChunkStream = null;
             }
@@ -112,40 +127,43 @@ namespace ClipStudioDesktop.Services.Audio
                 if (_currentChunkStream != null)
                 {
                     _currentChunkStream.Write(e.Buffer, 0, e.BytesRecorded);
-                    
-                    if (_currentChunkStream.Length >= _bytesPerChunk)
-                    {
-                        StartNewChunk();
-                    }
                 }
             }
         }
-
-        private void StartNewChunk()
+        
+        // This is necessary because the recorded file is RAW. We need valid WAV for FFmpeg auto-detection to work best in MergeFiles.
+        // Or we convert it explicitly.
+        public void FinalizeRecording()
         {
-            if (_currentChunkStream != null)
-            {
-                long length = _currentChunkStream.Length;
-                _currentChunkStream.Flush();
-                _currentChunkStream.Dispose();
-                
-                if (_currentChunkPath != null)
-                {
-                    _chunks.Add(_currentChunkPath);
-                }
-            }
-
-            // Keep max 7 chunks (similar to AudioRecorder)
-            int maxChunksToKeep = 7;
-            while (_chunks.Count >= maxChunksToKeep)
-            {
-                var oldChunk = _chunks[0];
-                _chunks.RemoveAt(0);
-                try { File.Delete(oldChunk); } catch { }
-            }
-
-            _currentChunkPath = Path.Combine(_bufferFolder, $"mic_{DateTime.Now.Ticks}.raw");
-            _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+             // This converts the current RAW file to WAV in-place (or replaces it)
+             if (_currentChunkPath == null || !File.Exists(_currentChunkPath)) return;
+             
+             try
+             {
+                 string rawPath = _currentChunkPath;
+                 string wavPath = Path.ChangeExtension(rawPath, ".wav");
+                 
+                 // If the file extension was already wav, we still need to fix headers if it was raw.
+                 // In Start(), we used whatever path was given. RecordingService gives "rec_mic_... .wav".
+                 // But we wrote RAW data to it. So it has .wav extension but no header.
+                 // We should rename it to .raw and then convert to .wav
+                 
+                 string tempRaw = rawPath + ".tmp.raw";
+                 File.Move(rawPath, tempRaw);
+                 
+                 ConvertRawToWav(tempRaw, wavPath);
+                 
+                 if (File.Exists(wavPath))
+                 {
+                     try { File.Delete(tempRaw); } catch { }
+                 }
+                 else
+                 {
+                     // Failed? Restore
+                     File.Move(tempRaw, rawPath);
+                 }
+             }
+             catch { }
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -159,84 +177,6 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
-        public string? SaveClip(int durationSeconds, string outputFolder)
-        {
-            if (!_isRecording || _waveFormat == null) 
-            {
-                return null; // Silent fail if mic not recording (optional feature)
-            }
-
-            string? tempRawFile = null;
-            string? trimmedRawFile = null;
-            try
-            {
-                List<string> filesToProcess;
-                lock (_lock)
-                {
-                    if (_currentChunkStream != null) _currentChunkStream.Flush();
-                    
-                    int chunksNeeded = (int)Math.Ceiling(durationSeconds / 30.0);
-                    filesToProcess = _chunks.TakeLast(chunksNeeded).ToList();
-                    if (_currentChunkPath != null) filesToProcess.Add(_currentChunkPath);
-                }
-
-                if (filesToProcess.Count == 0) return null;
-
-                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff");
-                tempRawFile = Path.Combine(outputFolder, $"temp_mic_full_{timestamp}.raw");
-                trimmedRawFile = Path.Combine(outputFolder, $"temp_mic_trimmed_{timestamp}.raw");
-
-                // Concatenate
-                using (var outputStream = new FileStream(tempRawFile, FileMode.Create))
-                {
-                    foreach (var file in filesToProcess)
-                    {
-                        try
-                        {
-                            using (var inputStream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                            {
-                                inputStream.CopyTo(outputStream);
-                            }
-                        }
-                        catch { }
-                    }
-                }
-
-                long fullFileSize = new FileInfo(tempRawFile).Length;
-                if (fullFileSize == 0) return null;
-
-                // Extract logic
-                int bytesPerSample = _waveFormat.BitsPerSample / 8;
-                int bytesPerSecond = _waveFormat.SampleRate * _waveFormat.Channels * bytesPerSample;
-                long bytesToExtract = (long)durationSeconds * bytesPerSecond;
-                long startPosition = Math.Max(0, fullFileSize - bytesToExtract);
-
-                using (var inputStream = new FileStream(tempRawFile, FileMode.Open, FileAccess.Read))
-                using (var outputStream = new FileStream(trimmedRawFile, FileMode.Create))
-                {
-                    inputStream.Seek(startPosition, SeekOrigin.Begin);
-                    inputStream.CopyTo(outputStream);
-                }
-
-                // Output as WAV always for intermediate merging
-                string outputFile = Path.Combine(outputFolder, $"mic_clip_{timestamp}.wav");
-                
-                ConvertRawToWav(trimmedRawFile, outputFile);
-                
-                return File.Exists(outputFile) ? outputFile : null;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error saving mic clip: {ex.Message}");
-                return null;
-            }
-            finally
-            {
-                if (tempRawFile != null) try { File.Delete(tempRawFile); } catch { }
-                if (trimmedRawFile != null) try { File.Delete(trimmedRawFile); } catch { }
-            }
-        }
-
         private void ConvertRawToWav(string inputFile, string outputFile)
         {
              try
@@ -246,7 +186,7 @@ namespace ClipStudioDesktop.Services.Audio
                  string sampleRate = _waveFormat!.SampleRate.ToString();
                  string channels = _waveFormat!.Channels.ToString();
                  
-                 // Always export as WAV PCM for merging
+                 // Raw to proper WAV
                  string args = $"-y -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \"{inputFile}\" -c:a pcm_s16le \"{outputFile}\"";
                  
                  var p = Process.Start(new ProcessStartInfo
@@ -281,11 +221,10 @@ namespace ClipStudioDesktop.Services.Audio
             Stop();
             try
             {
-                lock (_lock)
+                if (_currentChunkPath != null && File.Exists(_currentChunkPath))
                 {
-                    foreach (var chunk in _chunks) try { File.Delete(chunk); } catch { }
-                    _chunks.Clear();
-                    if (_currentChunkPath != null) try { File.Delete(_currentChunkPath); } catch { }
+                    // Clean up if needed? 
+                    // Usually RecordingService manages lifecycle of this file now.
                 }
             }
             catch { }

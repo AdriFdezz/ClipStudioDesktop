@@ -7,5 +7,6 @@ namespace ClipStudioDesktop.Services.Hotkeys
         void Initialize(IntPtr windowHandle);
         void RegisterHotKey(string keyCombination, Action action);
         void UnregisterHotKey(string keyCombination);
+        bool IsSuspended { get; set; }
     }
 }

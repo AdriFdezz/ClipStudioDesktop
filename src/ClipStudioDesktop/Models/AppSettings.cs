@@ -19,15 +19,15 @@ namespace ClipStudioDesktop.Models
     {
         public bool StartWithWindows { get; set; } = true;
         public bool ShowNotifications { get; set; } = true;
-        public bool PlaySoundOnClip { get; set; } = false;
+        public bool PlaySoundOnClip { get; set; } = true;
     }
 
     public class PathSettings
     {
-        public string TempBuffer { get; set; } = Path.Combine(Path.GetTempPath(), "ClipStudioDesktop", "buffer");
-        public string AudioClips { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ClipStudio", "Audio");
-        public string VideoClips { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ClipStudio", "Video");
-        public string Screenshots { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ClipStudio", "Imagenes");
+        public string Cache { get; set; } = Path.Combine(Path.GetTempPath(), "ClipStudioDesktop", "cache");
+        public string AudioClips { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ClipStudioDesktop Multimedia", "Audio");
+        public string VideoClips { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ClipStudioDesktop Multimedia", "Video");
+        public string Screenshots { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ClipStudioDesktop Multimedia", "Imagenes");
     }
 
     public class AudioSettings
@@ -70,12 +70,30 @@ namespace ClipStudioDesktop.Models
         public string Type { get; set; } = ""; // audio, video, screenshot
         public int Duration { get; set; } // seconds
         public string Mode { get; set; } = ""; // selection, fullscreen (for screenshots)
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string Description 
+        {
+            get
+            {
+                if (Type == "audio") return "Grabar/Detener Audio";
+                if (Type == "video") return "Grabar/Detener Video";
+                if (Type == "screenshot")
+                {
+                    if (Mode == "selection") return "Captura (Selección)";
+                    if (Mode == "fullscreen") return "Captura (Pantalla Completa)";
+                    if (Mode == "selection_clipboard") return "Copiar al Portapapeles (Selección)";
+                    return "Captura de Pantalla";
+                }
+                return Type;
+            }
+        }
     }
 
     public class BufferSettings
     {
         // Tamaño máximo del buffer en GB (para audio + video combinados)
-        public double MaxBufferSizeGB { get; set; } = 5.0; // 5GB por defecto
+        public double MaxBufferSizeGB { get; set; } = 2.0; // 2GB por defecto
         
         // Calculados en bytes para uso interno
         public long MaxBufferBytes => (long)(MaxBufferSizeGB * 1024 * 1024 * 1024);

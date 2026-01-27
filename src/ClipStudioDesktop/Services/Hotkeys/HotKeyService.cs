@@ -66,10 +66,18 @@ namespace ClipStudioDesktop.Services.Hotkeys
             // For now, we'll rely on Dispose to clear all
         }
 
+        public bool IsSuspended { get; set; }
+
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == WM_HOTKEY)
             {
+                if (IsSuspended)
+                {
+                    // Ignore hotkeys when suspended
+                    return IntPtr.Zero;
+                }
+
                 int id = wParam.ToInt32();
                 if (_callbacks.TryGetValue(id, out var action))
                 {

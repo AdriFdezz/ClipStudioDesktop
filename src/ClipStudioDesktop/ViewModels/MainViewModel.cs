@@ -45,11 +45,16 @@ namespace ClipStudioDesktop.ViewModels
         }
 
         public string StatusText => _recordingService.IsRecording ? "Grabando (Activo)" : "Pausado";
-        public string RecordingButtonText => _recordingService.IsRecording ? "Desactivar Grabación" : "Activar Grabación";
-        public string BufferSizeText { get; private set; } = "Calculando...";
-        public string AudioSegmentsText { get; private set; } = "0";
-        public string VideoSegmentsText { get; private set; } = "0";
-        public string ReservedSpaceText { get; private set; } = "Calculando...";
+        
+        public string VideoButtonText => _recordingService.IsRecording && _recordingService.IsVideoMode ? "Detener Video" : "Grabar Video";
+        public string AudioButtonText => _recordingService.IsRecording && !_recordingService.IsVideoMode ? "Detener Audio" : "Grabar Audio";
+        
+        public bool IsVideoCaptureEnabled => !_recordingService.IsRecording || (_recordingService.IsRecording && _recordingService.IsVideoMode);
+        public bool IsAudioCaptureEnabled => !_recordingService.IsRecording || (_recordingService.IsRecording && !_recordingService.IsVideoMode);
+
+        public string BufferSizeText { get; private set; } = "0 MB";
+        
+        // Properties for stats
         public string AudioClipsText { get; private set; } = "0";
         public string VideoClipsText { get; private set; } = "0";
         public string ImagesText { get; private set; } = "0";
@@ -57,11 +62,12 @@ namespace ClipStudioDesktop.ViewModels
 
         public ICommand SaveCommand { get; }
         public ICommand ResetCommand { get; }
-        public ICommand ToggleRecordingCommand { get; }
-        public ICommand ClearBufferCommand { get; }
+        public ICommand ToggleVideoCommand { get; }
+        public ICommand ToggleAudioCommand { get; }
         public ICommand OpenAudioFolderCommand { get; }
         public ICommand OpenVideoFolderCommand { get; }
         public ICommand OpenImagesFolderCommand { get; }
+        public ICommand ReloadSettingsCommand { get; }
 
         public MainViewModel(ISettingsService settingsService, IStorageService storageService, IRecordingService recordingService)
         {
@@ -71,20 +77,89 @@ namespace ClipStudioDesktop.ViewModels
 
             SaveCommand = new RelayCommand(_ => SaveSettings());
             ResetCommand = new RelayCommand(_ => ResetSettings());
-            ToggleRecordingCommand = new RelayCommand(async _ => await ToggleRecording());
-            ClearBufferCommand = new RelayCommand(_ => ClearBuffer(), _ => !_recordingService.IsRecording);
+            ToggleVideoCommand = new RelayCommand(async _ => await ToggleVideoRecording());
+            ToggleAudioCommand = new RelayCommand(async _ => await ToggleAudioRecording());
             OpenAudioFolderCommand = new RelayCommand(_ => OpenFolder(_storageService.GetAudioFolder()));
             OpenVideoFolderCommand = new RelayCommand(_ => OpenFolder(_storageService.GetVideoFolder()));
             OpenImagesFolderCommand = new RelayCommand(_ => OpenFolder(_storageService.GetImageFolder()));
+            ReloadSettingsCommand = new RelayCommand(_ => ReloadSettings());
 
             LoadAudioDevices();
             LoadAvailableMicrophones();
             
             _timer = new System.Windows.Threading.DispatcherTimer();
             _timer.Interval = TimeSpan.FromSeconds(2);
-            _timer.Tick += UpdateStats;
+            _timer.Tick += UpdateStats; // Mantener timer para clips y espacio usado
             _timer.Start();
+            
+            // Suscribirse a cambios en tiempo real del buffer
+            _recordingService.BufferSizeChanged += OnBufferSizeChanged;
+            _recordingService.RecordingStateChanged += OnRecordingStateChanged;
+            
             UpdateStats(null, EventArgs.Empty);
+        }
+
+        private void OnRecordingStateChanged(object? sender, bool isRecording)
+        {
+             System.Windows.Application.Current.Dispatcher.Invoke(() =>
+             {
+                 OnPropertyChanged(nameof(StatusText));
+                 OnPropertyChanged(nameof(VideoButtonText));
+                 OnPropertyChanged(nameof(AudioButtonText));
+                 OnPropertyChanged(nameof(IsVideoCaptureEnabled));
+                 OnPropertyChanged(nameof(IsAudioCaptureEnabled));
+                 if (!isRecording) 
+                 {
+                     BufferSizeText = "0 MB";
+                     OnPropertyChanged(nameof(BufferSizeText));
+                 }
+             });
+        }
+
+        private void OnBufferSizeChanged(object? sender, (long Estimated, long Physical) sizes)
+        {
+             System.Windows.Application.Current.Dispatcher.Invoke(() =>
+             {
+                 UpdateBufferStats(sizes.Estimated, sizes.Physical);
+             });
+        }
+
+        private void UpdateBufferStats(long estimatedBytes, long physicalBytes)
+        {
+            try
+            {
+                if (!_recordingService.IsRecording && estimatedBytes == 0)
+                {
+                    BufferSizeText = "0 MB";
+                }
+                else
+                {
+                    string estStr = FormatBytes(estimatedBytes);
+                    string physStr = FormatBytes(physicalBytes);
+                    
+                    BufferSizeText = physStr;
+                }
+            }
+            catch
+            {
+                BufferSizeText = "Error";
+            }
+            
+            OnPropertyChanged(nameof(BufferSizeText));
+        }
+
+        private string FormatBytes(long bytes)
+        {
+            if (bytes < 1024 * 1024 * 1024) 
+            {
+                double mb = bytes / 1024.0 / 1024.0;
+                return $"{mb:F2} MB";
+            }
+            else
+            {
+                double gb = bytes / 1024.0 / 1024.0 / 1024.0;
+                return $"{gb:F2} GB";
+            }
         }
 
         private void LoadAudioDevices()
@@ -259,74 +334,12 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
-        private void ClearBuffer()
-        {
-            try
-            {
-                _recordingService.ClearBuffer();
-                
-                // Restablecer el espacio reservado al tamaño configurado
-                string bufferPath = _settingsService.CurrentSettings.Paths.TempBuffer;
-                long bytesToReserve = _settingsService.CurrentSettings.Buffer.MaxBufferBytes;
-                ClipStudioDesktop.Services.Storage.DiskSpaceReservation.ReserveSpace(bufferPath, bytesToReserve);
-                
-                System.Windows.MessageBox.Show("Buffer limpiado exitosamente.", "Buffer Limpio", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
-                UpdateStats(null, EventArgs.Empty); // Actualizar stats
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show($"Error al limpiar buffer: {ex.Message}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-            }
-        }
-
         private void UpdateStats(object? sender, EventArgs e)
         {
             OnPropertyChanged(nameof(StatusText));
-            OnPropertyChanged(nameof(RecordingButtonText));
 
-            try
-            {
-                string bufferPath = _settingsService.CurrentSettings.Paths.TempBuffer;
-                long bufferSize = GetDirectorySize(bufferPath);
-                BufferSizeText = $"{bufferSize / 1024 / 1024} MB (Disco)";
-                
-                // Contar segmentos de video (audio está incluido en los segmentos de video)
-                string videoPath = Path.Combine(bufferPath, "video");
-                int videoSegments = 0;
-                if (Directory.Exists(videoPath))
-                {
-                    videoSegments = Directory.GetFiles(videoPath, "*.mp4").Length;
-                }
-                VideoSegmentsText = videoSegments.ToString();
-                
-                // Audio está integrado en los segmentos de video
-                AudioSegmentsText = videoSegments > 0 ? $"{videoSegments} (en video)" : "0";
-
-                
-                // Calcular espacio reservado restante
-                long reservedSize = ClipStudioDesktop.Services.Storage.DiskSpaceReservation.GetCurrentReservationSize(bufferPath);
-                if (reservedSize < 1024 * 1024 * 1024) // Menos de 1GB
-                {
-                    ReservedSpaceText = $"{reservedSize / 1024 / 1024} MB";
-                }
-                else
-                {
-                    double reservedGB = reservedSize / 1024.0 / 1024.0 / 1024.0;
-                    ReservedSpaceText = $"{reservedGB:F2} GB";
-                }
-            }
-            catch 
-            { 
-                BufferSizeText = "N/A";
-                AudioSegmentsText = "0";
-                VideoSegmentsText = "0";
-                ReservedSpaceText = "N/A";
-            }
-            OnPropertyChanged(nameof(BufferSizeText));
-            OnPropertyChanged(nameof(AudioSegmentsText));
-            OnPropertyChanged(nameof(VideoSegmentsText));
-            OnPropertyChanged(nameof(ReservedSpaceText));
-
+            
+            // Stats updates for clips folder
             try
             {
                 var audioFiles = GetAllFiles(_storageService.GetAudioFolder());
@@ -347,7 +360,7 @@ namespace ClipStudioDesktop.ViewModels
                 }
                 else
                 {
-                    SpaceUsedText = $"{totalMB:F0} MB";
+                    SpaceUsedText = $"{totalMB:F2} MB";
                 }
             }
             catch 
@@ -363,56 +376,20 @@ namespace ClipStudioDesktop.ViewModels
             OnPropertyChanged(nameof(SpaceUsedText));
         }
 
-        private long GetDirectorySize(string path)
-        {
-            if (!Directory.Exists(path)) return 0;
-            
-            long totalSize = 0;
-            
-            // Audio buffer
-            string audioPath = Path.Combine(path, "audio");
-            if (Directory.Exists(audioPath))
-            {
-                totalSize += new DirectoryInfo(audioPath)
-                    .GetFiles("*.raw", SearchOption.TopDirectoryOnly)
-                    .Sum(f => f.Length);
-            }
-            
-            // Video buffer
-            string videoPath = Path.Combine(path, "video");
-            if (Directory.Exists(videoPath))
-            {
-                totalSize += new DirectoryInfo(videoPath)
-                    .GetFiles("*.mp4", SearchOption.TopDirectoryOnly)
-                    .Sum(f => f.Length);
-            }
-            
-            return totalSize;
-        }
-
         private FileInfo[] GetAllFiles(string path)
         {
             if (!Directory.Exists(path)) return Array.Empty<FileInfo>();
             return new DirectoryInfo(path).GetFiles("*.*", SearchOption.TopDirectoryOnly);
         }
-        private async System.Threading.Tasks.Task ToggleRecording()
+        
+        private async System.Threading.Tasks.Task ToggleVideoRecording()
         {
-            if (_recordingService.IsRecording)
-            {
-                await _recordingService.StopRecordingAsync();
-            }
-            else
-            {
-                await _recordingService.StartRecordingAsync();
-            }
-            OnPropertyChanged(nameof(StatusText));
-            OnPropertyChanged(nameof(RecordingButtonText));
-            
-            // Actualizar estado del bot\u00f3n ClearBuffer
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                ((RelayCommand)ClearBufferCommand).RaiseCanExecuteChanged();
-            });
+            await _recordingService.ToggleRecordingAsync(videoEnabled: true);
+        }
+
+        private async System.Threading.Tasks.Task ToggleAudioRecording()
+        {
+            await _recordingService.ToggleRecordingAsync(videoEnabled: false);
         }
 
         private void SaveSettings()
@@ -431,12 +408,7 @@ namespace ClipStudioDesktop.ViewModels
 
             if (result == System.Windows.MessageBoxResult.Yes)
             {
-                var fileName = Process.GetCurrentProcess().MainModule?.FileName;
-                if (fileName != null)
-                {
-                    Process.Start(fileName);
-                    System.Windows.Application.Current.Shutdown();
-                }
+                RestartApplication();
             }
         }
 
@@ -446,6 +418,34 @@ namespace ClipStudioDesktop.ViewModels
             {
                 _settingsService.ResetToDefaults();
                 OnPropertyChanged(nameof(Settings));
+                
+                if (System.Windows.MessageBox.Show("Valores restaurados. Se recomienda reiniciar para aplicar todos los cambios.\n¿Desea reiniciar ahora?", "Reiniciar", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.Yes)
+                {
+                    RestartApplication();
+                }
+            }
+        }
+
+        private void ReloadSettings()
+        {
+            _settingsService.LoadSettings();
+            OnPropertyChanged(nameof(Settings));
+        }
+
+        private void RestartApplication()
+        {
+            var fileName = Process.GetCurrentProcess().MainModule?.FileName;
+            
+            // Fix for .NET Core/5+ where MainModule might point to .dll
+            if (fileName != null && fileName.EndsWith(".dll"))
+            {
+                fileName = System.IO.Path.ChangeExtension(fileName, ".exe");
+            }
+            
+            if (fileName != null && System.IO.File.Exists(fileName))
+            {
+                Process.Start(fileName);
+                System.Windows.Application.Current.Shutdown();
             }
         }
 

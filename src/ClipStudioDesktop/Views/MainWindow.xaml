@@ -9,7 +9,7 @@
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel, IsDesignTimeCreatable=False}"
         Title="Clip Studio Desktop" Height="650" Width="900"
         ResizeMode="CanMinimize"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         Icon="pack://application:,,,/assets/Clip_Studio_Desktop_ico.ico"
         Background="{StaticResource BackgroundBrush}"
         Deactivated="Window_Deactivated">
@@ -38,13 +38,13 @@
         </Border>
 
         <!-- Main Content -->
-        <TabControl Grid.Row="1" Margin="20" Background="Transparent" BorderThickness="0">
+        <TabControl Grid.Row="1" Margin="15,10,15,15" Background="Transparent" BorderThickness="0">
             <!-- General Tab -->
             <TabItem Header="GENERAL">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,20,0,0">
+                    <StackPanel Margin="0,10,15,0">
                         <GroupBox Header="Opciones de Inicio">
-                            <StackPanel Margin="5">
+                            <StackPanel>
                                 <CheckBox Content="Iniciar con Windows" IsChecked="{Binding Settings.General.StartWithWindows}" Margin="0,8"/>
                                 <CheckBox Content="Mostrar notificaciones" IsChecked="{Binding Settings.General.ShowNotifications}" Margin="0,8"/>
                                 <CheckBox Content="Reproducir sonido al guardar" IsChecked="{Binding Settings.General.PlaySoundOnClip}" Margin="0,8"/>
@@ -52,13 +52,13 @@
                         </GroupBox>
 
                         <GroupBox Header="Carpetas de Almacenamiento">
-                            <StackPanel Margin="5">
+                            <StackPanel>
                                 <Grid Margin="0,5">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Carpeta de Audio" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="Carpeta de Audio" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Content="Abrir Carpeta" Command="{Binding OpenAudioFolderCommand}" Width="140" Margin="10,0,0,0"/>
                                 </Grid>
                                 <Grid Margin="0,5">
@@ -66,7 +66,7 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Carpeta de Video" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="Carpeta de Video" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Content="Abrir Carpeta" Command="{Binding OpenVideoFolderCommand}" Width="140" Margin="10,0,0,0"/>
                                 </Grid>
                                 <Grid Margin="0,5">
@@ -74,7 +74,7 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Carpeta de Imágenes" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="Carpeta de Imágenes" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Content="Abrir Carpeta" Command="{Binding OpenImagesFolderCommand}" Width="140" Margin="10,0,0,0"/>
                                 </Grid>
                             </StackPanel>
@@ -86,9 +86,9 @@
             <!-- Audio/Video Tab -->
             <TabItem Header="AUDIO Y VIDEO">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,20,0,0">
+                    <StackPanel Margin="0,10,15,0">
                         <GroupBox Header="Configuración de Audio">
-                            <Grid Margin="5">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
@@ -132,7 +132,7 @@
                         </GroupBox>
 
                         <GroupBox Header="Configuración de Video">
-                            <Grid Margin="5">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="*"/>
@@ -143,7 +143,7 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Text="Formato" VerticalAlignment="Center" Margin="0,10"/>
+                                <TextBlock Text="Formato de Video" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Video.Format}" SelectedValuePath="Content" Margin="0,5"
                                           ToolTip="Formato de archivo de video (mp4, mkv).">
                                     <ComboBoxItem Content="mp4"/>
@@ -166,22 +166,37 @@
                                 </ComboBox>
                             </Grid>
                         </GroupBox>
+
+                        <GroupBox Header="Configuración de Imagen">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Formato de Imagen" VerticalAlignment="Center" Margin="0,10"/>
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Screenshot.Format}" SelectedValuePath="Content" Margin="0,5"
+                                          ToolTip="Formato de archivo para las capturas de pantalla (png, jpg).">
+                                    <ComboBoxItem Content="png"/>
+                                    <ComboBoxItem Content="jpg"/>
+                                </ComboBox>
+                            </Grid>
+                        </GroupBox>
                         
-                        <GroupBox Header="Buffer de Grabación">
-                             <StackPanel Margin="5">
-                                <TextBlock Text="Tamaño máximo del buffer (GB)" FontWeight="SemiBold" Margin="0,5"/>
-                                <TextBlock Text="Espacio reservado en disco para el buffer de audio y video. Cuando se llene, se eliminarán automáticamente los segmentos más antiguos." 
+                        <GroupBox Header="Límite de Grabación (Seguridad)">
+                             <StackPanel>
+                                <TextBlock Text="Límite de tamaño (GB)" FontWeight="SemiBold" Margin="0,5"/>
+                                <TextBlock Text="Si la grabación alcanza este tamaño, se detendrá automáticamente para evitar llenar el disco. (0 = Sin límite)" 
                                            TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,10" FontSize="11"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Tamaño del buffer (GB)" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Límite Máximo" VerticalAlignment="Center" Margin="0,0,15,0"/>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <TextBox Text="{Binding Settings.Buffer.MaxBufferSizeGB}" Width="100"
-                                                 ToolTip="Espacio máximo reservado en disco para el buffer (por defecto 5GB)"/>
-                                        <TextBlock Text="GB" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        <TextBox Text="{Binding Settings.Buffer.MaxBufferSizeGB}" Width="80"
+                                                 ToolTip="Tamaño máximo en GB antes de detener (ej. 10)"/>
+                                        <TextBlock Text="GB" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource TextSecondaryBrush}"/>
                                     </StackPanel>
                                 </Grid>
                              </StackPanel>
@@ -192,8 +207,57 @@
 
             <!-- Hotkeys Tab -->
             <TabItem Header="ATAJOS">
-                <Grid Margin="0,20,0,0">
-                    <DataGrid x:Name="HotkeysGrid" ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Single" SelectionUnit="Cell" BorderThickness="1" BorderBrush="{StaticResource BorderBrush}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,10,15,0">
+
+                    <!-- Info Box -->
+                    <Border Background="{StaticResource SurfaceLightBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="Cómo cambiar los atajos" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,5"/>
+                            <Border Height="1" Background="{StaticResource BorderBrush}" Opacity="1.0" Margin="0,2,0,10"/>
+                            <TextBlock Text="Haz doble clic en la columna 'Atajo de Teclado' y presiona la nueva combinación de teclas." 
+                                       Foreground="#CCCCCC" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                            
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="Aviso: Dependiendo del atajo que elijas, puede crear conflictos con otros de otras aplicaciones ya existentes." 
+                                           Foreground="#FFA500" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <Button Content="Deshacer Cambios" 
+                                    Command="{Binding ReloadSettingsCommand}"
+                                    HorizontalAlignment="Left"
+                                    Cursor="Hand"
+                                    ToolTip="Restaura los atajos a su última configuración guardada">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="#007ACC"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="Padding" Value="6"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" 
+                                                            Padding="{TemplateBinding Padding}" 
+                                                            CornerRadius="4">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#0097FB"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <DataGrid x:Name="HotkeysGrid" ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Single" SelectionUnit="Cell" BorderThickness="1" BorderBrush="{StaticResource BorderBrush}"
+                              VerticalAlignment="Top">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
                                 <Setter Property="Background" Value="Transparent"/>
@@ -220,7 +284,8 @@
                             </Style>
                         </DataGrid.CellStyle>
                         <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Tecla" Width="*" IsReadOnly="False">
+                            <DataGridTextColumn Header="Acción" Binding="{Binding Description}" Width="250" IsReadOnly="True" FontWeight="SemiBold"/>
+                            <DataGridTemplateColumn Header="Atajo de Teclado" Width="*" IsReadOnly="False">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding Key}" VerticalAlignment="Center" Padding="5,0"/>
@@ -232,143 +297,117 @@
                                                  PreviewKeyDown="HotkeyTextBox_PreviewKeyDown"
                                                  GotFocus="HotkeyTextBox_GotFocus"
                                                  LostFocus="HotkeyTextBox_LostFocus"
+                                                 Loaded="HotkeyTextBox_Loaded"
                                                  IsReadOnly="True" 
                                                  Cursor="Hand"
                                                  ToolTip="Presiona la combinación de teclas deseada"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellEditingTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="100" IsReadOnly="True"/>
-                            <DataGridTextColumn Header="Duración (s)" Binding="{Binding Duration}" Width="100" IsReadOnly="True"/>
-                            <DataGridTextColumn Header="Modo" Binding="{Binding Mode}" Width="150"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                </Grid>
-            </TabItem>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
 
             <!-- Status Tab -->
             <TabItem Header="ESTADO">
-                <StackPanel Margin="0,20,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,10,15,0">
                     <GroupBox Header="Estado del Sistema">
-                        <StackPanel Margin="5">
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Estado de Grabación" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Border Background="#102E10" CornerRadius="4" HorizontalAlignment="Left" Height="28" Padding="6,0" Margin="0,0,8,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding StatusText}" Foreground="#4CAF50" FontWeight="Bold" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <Button Content="{Binding RecordingButtonText}" Command="{Binding ToggleRecordingCommand}" Width="160" Height="28" Margin="0,0,8,0"/>
-                                    <Button Content="Limpiar Buffer" Command="{Binding ClearBufferCommand}" Width="120" Height="28" Background="#D32F2F" Foreground="White" ToolTip="Limpiar todo el buffer de grabación (solo disponible cuando está pausado)"/>
-                                </StackPanel>
-                            </Grid>
-                            
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Tamaño Buffer" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding BufferSizeText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                            </Grid>
-                            
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Segmentos Audio" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding AudioSegmentsText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                            </Grid>
-                            
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Segmentos Video" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding VideoSegmentsText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                            </Grid>
-                            
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Espacio Reservado" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding ReservedSpaceText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                            </Grid>
-                        </StackPanel>
+                        <StackPanel>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Estado de Grabación" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Border Background="#102E10" CornerRadius="4" HorizontalAlignment="Left" Height="28" Padding="6,0" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding StatusText}" Foreground="#4CAF50" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <Button Content="{Binding VideoButtonText}" Command="{Binding ToggleVideoCommand}" IsEnabled="{Binding IsVideoCaptureEnabled}" Width="110" Height="28" Margin="0,0,8,0"/>
+                                        <Button Content="{Binding AudioButtonText}" Command="{Binding ToggleAudioCommand}" IsEnabled="{Binding IsAudioCaptureEnabled}" Width="110" Height="28" Margin="0,0,8,0"/>
+                                    </StackPanel>
+                                </Grid>
+                                
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Tamaño Actual RAW" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding BufferSizeText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </StackPanel>
                     </GroupBox>
 
-                    <GroupBox Header="Estadísticas Totales" Margin="0,8,0,0">
-                        <Grid Margin="5">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            
-                            <!-- Primera columna -->
-                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                <Grid Margin="0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Clips Audio" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding AudioClipsText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                </Grid>
+                    <GroupBox Header="Estadísticas Totales">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
                                 
-                                <Grid Margin="0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Clips Video" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding VideoClipsText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                </Grid>
-                            </StackPanel>
-                            
-                            <!-- Segunda columna -->
-                            <StackPanel Grid.Column="1">
-                                <Grid Margin="0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Imágenes" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding ImagesText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                </Grid>
+                                <!-- Primera columna -->
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Clips Audio" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding AudioClipsText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Clips Video" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding VideoClipsText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
                                 
-                                <Grid Margin="0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Espacio Usado" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding SpaceUsedText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                </Grid>
-                            </StackPanel>
-                        </Grid>
+                                <!-- Segunda columna -->
+                                <StackPanel Grid.Column="1">
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Imágenes" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding ImagesText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Espacio Usado" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding SpaceUsedText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
                     </GroupBox>
                 </StackPanel>
-            </TabItem>
+            </ScrollViewer>
+        </TabItem>
         </TabControl>
 
         <!-- Footer -->
         <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" Padding="20" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Width="160" Height="32" Margin="0,0,10,0">
+                <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Width="180" Height="40" Margin="0,0,10,0">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Background" Value="#2D2D32"/>
                             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
                             <Setter Property="BorderThickness" Value="1"/>
                             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -386,7 +425,7 @@
                             </Setter>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#33FFFFFF"/>
+                                    <Setter Property="Background" Value="#3E3E42"/>
                                     <Setter Property="BorderBrush" Value="#66FFFFFF"/>
                                     <Setter Property="Cursor" Value="Hand"/>
                                 </Trigger>
@@ -394,7 +433,7 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Width="160" Height="32"/>
+                <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Width="180" Height="40"/>
             </StackPanel>
         </Border>
     </Grid>

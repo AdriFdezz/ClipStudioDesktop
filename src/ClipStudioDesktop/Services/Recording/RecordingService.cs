@@ -19,306 +19,388 @@ namespace ClipStudioDesktop.Services.Recording
         private AudioRecorder? _audioRecorder;
         private MicrophoneRecorder? _micRecorder;
         private System.Timers.Timer? _checkTimer;
+        
+        // Tracking current recording files
+        private string? _currentVideoFile;
+        private string? _currentAudioFile;
+        private string? _currentMicFile;
+        
+        private long _maxSizeBytes = 0;
 
         public RecordingService(ISettingsService settingsService, IStorageService storageService)
         {
             _settingsService = settingsService;
             _storageService = storageService;
             
-            // Clean buffer from previous sessions on startup
-            CleanBufferFolder();
+            // Initialize recorders
+            _videoRecorder = new FFmpegRecorder(_settingsService.CurrentSettings);
+            _audioRecorder = new AudioRecorder(_settingsService.CurrentSettings);
             
-            // Reservar espacio en disco para el buffer
-            string bufferPath = _settingsService.CurrentSettings.Paths.TempBuffer;
-            long bytesToReserve = _settingsService.CurrentSettings.Buffer.MaxBufferBytes;
-            Storage.DiskSpaceReservation.ReserveSpace(bufferPath, bytesToReserve);
-        }
-        
-        private void CleanBufferFolder()
-        {
-            try
-            {
-                string bufferPath = _settingsService.CurrentSettings.Paths.TempBuffer;
-                if (Directory.Exists(bufferPath))
-                {
-                    // Clean audio buffer
-                    string audioBuffer = Path.Combine(bufferPath, "audio");
-                    if (Directory.Exists(audioBuffer))
-                    {
-                        foreach (var file in Directory.GetFiles(audioBuffer, "*.*", SearchOption.TopDirectoryOnly))
-                        {
-                            try { File.Delete(file); } catch { }
-                        }
-                    }
-                    
-                    // Clean video buffer
-                    string videoBuffer = Path.Combine(bufferPath, "video");
-                    if (Directory.Exists(videoBuffer))
-                    {
-                        foreach (var file in Directory.GetFiles(videoBuffer, "*.*", SearchOption.TopDirectoryOnly))
-                        {
-                            try { File.Delete(file); } catch { }
-                        }
-                    }
-                }
-                
-                System.Diagnostics.Debug.WriteLine("Buffer cleaned on startup");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error cleaning buffer: {ex.Message}");
-            }
+            // Safety Check Timer (runs every 10s to check size limit)
+            _checkTimer = new System.Timers.Timer(10000);
+            _checkTimer.Elapsed += CheckRecordingLimit;
         }
 
         public bool IsRecording { get; private set; }
         public event EventHandler<bool>? RecordingStateChanged;
         public event EventHandler<string>? ClipSaved;
+        public event EventHandler<(long Estimated, long Physical)>? BufferSizeChanged; // Legacy name, repurposed for current size updates
 
-        public async Task StartRecordingAsync()
-        {
-            if (IsRecording) return;
+        public bool IsVideoMode { get; private set; } = true;
 
-            // Initialize and start FFmpeg recorder (video only)
-            _videoRecorder = new FFmpegRecorder(_settingsService.CurrentSettings);
-            bool videoStarted = await _videoRecorder.StartAsync();
-
-            if (!videoStarted)
-            {
-                System.Windows.MessageBox.Show("No se pudo iniciar la grabación de video con FFmpeg.", "Error de Grabación", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            // Initialize and start Audio recorder (NAudio WASAPI loopback for desktop audio)
-            // This will automatically capture all system audio without configuration
-            _audioRecorder = new AudioRecorder(_settingsService.CurrentSettings);
-            bool audioStarted = _audioRecorder.Start();
-            
-            if (!audioStarted)
-            {
-                // Audio failed but video is running - continue with video only
-                System.Diagnostics.Debug.WriteLine("WARNING: Audio recording failed to start (no audio device active?). Continuing with video only.");
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("Audio recording started - capturing desktop audio via WASAPI loopback");
-            }
-
-            // Initialize and start Microphone recorder if enabled
-            if (_settingsService.CurrentSettings.Audio.EnableMicrophone)
-            {
-                _micRecorder = new MicrophoneRecorder(_settingsService.CurrentSettings);
-                bool micStarted = _micRecorder.Start();
-                if (micStarted)
-                {
-                     System.Diagnostics.Debug.WriteLine($"Microphone recording started: {_settingsService.CurrentSettings.Audio.SelectedMicrophone}");
-                }
-                else
-                {
-                     System.Diagnostics.Debug.WriteLine("Microphone recording failed to start or disabled");
-                     _micRecorder = null;
-                }
-            }
-
-            System.Diagnostics.Debug.WriteLine("Recording started - video and audio capturing separately");
-            IsRecording = true;
-            RecordingStateChanged?.Invoke(this, IsRecording);
-            StartHealthCheck();
-        }
-
-        private void StartHealthCheck()
-        {
-            if (_checkTimer == null)
-            {
-                _checkTimer = new System.Timers.Timer(5000); // Check every 5 seconds
-                _checkTimer.Elapsed += async (s, e) => await CheckRecordingHealth();
-            }
-            _checkTimer.Start();
-        }
-
-        private Task CheckRecordingHealth()
-        {
-            if (!IsRecording) return Task.CompletedTask;
-
-            // FFmpegRecorder handles its own segmentation, no health check needed
-            /*
-            if (_videoRecorder != null && !_videoRecorder.IsRunning)
-            {
-                System.Diagnostics.Debug.WriteLine("Video recorder stopped unexpectedly. Restarting...");
-                try { _videoRecorder.Dispose(); } catch { }
-                
-                _videoRecorder = new FFmpegRecorder(_settingsService.CurrentSettings);
-                await _videoRecorder.StartAsync();
-            }
-            */
-            return Task.CompletedTask;
-        }
-
-        public Task StopRecordingAsync()
-        {
-            _checkTimer?.Stop();
-            _videoRecorder?.Stop();
-            _audioRecorder?.Stop();
-            _micRecorder?.Stop();
-            IsRecording = false;
-            RecordingStateChanged?.Invoke(this, IsRecording);
-            return Task.CompletedTask;
-        }
-
-        public void ClearBuffer()
+        public async Task ToggleRecordingAsync(bool videoEnabled = true)
         {
             if (IsRecording)
             {
-                throw new InvalidOperationException("No se puede limpiar el buffer mientras la grabación está activa.");
+                if (IsVideoMode == videoEnabled)
+                {
+                    await StopRecordingAsync();
+                }
+                else
+                {
+                    // Switch mode: Stop then Start new mode
+                    await StopRecordingAsync();
+                    await Task.Delay(500); // Give a moment to cleanup
+                    await StartRecordingAsync(videoEnabled);
+                }
             }
-            
-            CleanBufferFolder();
+            else
+            {
+                await StartRecordingAsync(videoEnabled);
+            }
         }
 
-        public void UpdateBufferReservation()
+        public async Task StartRecordingAsync(bool videoEnabled = true)
         {
-            try
+            if (IsRecording) return;
+            
+            try 
             {
-                string bufferPath = _settingsService.CurrentSettings.Paths.TempBuffer;
-                long bytesToReserve = _settingsService.CurrentSettings.Buffer.MaxBufferBytes;
-                Storage.DiskSpaceReservation.UpdateReservation(bufferPath, bytesToReserve);
-                System.Diagnostics.Debug.WriteLine($"RecordingService: Reserva de buffer actualizada a {bytesToReserve / 1024 / 1024 / 1024}GB");
+                IsVideoMode = videoEnabled;
+                _storageService.EnsureDirectoriesExist();
+                string tempFolder = Path.Combine(Path.GetTempPath(), "ClipStudio_Rec");
+                if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
+                
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                
+                // 1. Start Video (Only if videoEnabled)
+                if (IsVideoMode)
+                {
+                    string ext = _settingsService.CurrentSettings.Video.Format.ToLower();
+                    if (string.IsNullOrEmpty(ext)) ext = "mp4";
+                    
+                    _currentVideoFile = Path.Combine(tempFolder, $"rec_video_{timestamp}.{ext}");
+                    _videoRecorder?.StartRecording(_currentVideoFile);
+                }
+                else
+                {
+                    _currentVideoFile = null;
+                }
+                
+                // 2. Start Desktop Audio
+                _currentAudioFile = Path.Combine(tempFolder, $"rec_audio_{timestamp}.raw");
+                bool audioStarted = _audioRecorder?.Start(_currentAudioFile) ?? false;
+                if (!audioStarted) _currentAudioFile = null;
+
+                // 3. Start Mic (if enabled)
+                if (_settingsService.CurrentSettings.Audio.EnableMicrophone)
+                {
+                    _micRecorder = new MicrophoneRecorder(_settingsService.CurrentSettings);
+                     _currentMicFile = Path.Combine(tempFolder, $"rec_mic_{timestamp}.wav");
+                    if (!_micRecorder.Start(_currentMicFile))
+                    {
+                        _currentMicFile = null;
+                    }
+                }
+                else
+                {
+                    _micRecorder = null;
+                    _currentMicFile = null;
+                }
+                
+                // Set limit
+                _maxSizeBytes = _settingsService.CurrentSettings.Buffer.MaxBufferBytes;
+                if (_maxSizeBytes <= 0) _maxSizeBytes = 10L * 1024 * 1024 * 1024; 
+
+                IsRecording = true;
+                RecordingStateChanged?.Invoke(this, IsRecording);
+                _checkTimer?.Start();
+                
+                System.Diagnostics.Debug.WriteLine($"Direct Recording Started (Video: {IsVideoMode})");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"RecordingService: Error al actualizar reserva de buffer: {ex.Message}");
+                 System.Windows.MessageBox.Show($"Error al iniciar grabación: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                 await StopRecordingAsync();
             }
+        }
+
+        public async Task StopRecordingAsync()
+        {
+            if (!IsRecording) return;
+            
+            try
+            {
+                _checkTimer?.Stop();
+                
+                // Stop all recorders
+                await (_videoRecorder?.Stop() ?? Task.CompletedTask);
+                _audioRecorder?.Stop();
+                 _micRecorder?.Stop();
+                
+                IsRecording = false;
+                RecordingStateChanged?.Invoke(this, IsRecording);
+
+                // Finalize and Merge
+                await FinalizeAndSaveRecording();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error stopping recording: {ex.Message}");
+            }
+        }
+        
+        private async void CheckRecordingLimit(object? sender, System.Timers.ElapsedEventArgs e)
+        {
+             if (!IsRecording) return;
+             
+             long physicalSize = 0;
+             long displaySize = 0;
+             try
+             {
+                 if (_currentVideoFile != null && File.Exists(_currentVideoFile))
+                 {
+                     long vSize = new FileInfo(_currentVideoFile).Length;
+                     physicalSize += vSize;
+                     displaySize += vSize;
+                 }
+                 
+                 if (_currentAudioFile != null && File.Exists(_currentAudioFile))
+                 {
+                     long aSize = new FileInfo(_currentAudioFile).Length;
+                     physicalSize += aSize;
+                     displaySize += (aSize / 10); // Estimate compression (Raw -> MP3/AAC is approx 10:1)
+                 }
+                 
+                 if (_currentMicFile != null && File.Exists(_currentMicFile))
+                 {
+                     long mSize = new FileInfo(_currentMicFile).Length;
+                     physicalSize += mSize;
+                     displaySize += (mSize / 10);
+                 }
+                 
+                 // Update UI with ESTIMATED final size AND Physical size
+                 BufferSizeChanged?.Invoke(this, (displaySize, physicalSize));
+                 
+                 // Safety Check with PHYSICAL size (Disk usage)
+                 if (physicalSize > _maxSizeBytes)
+                 {
+                     System.Diagnostics.Debug.WriteLine("Safety limit reached. Stopping recording.");
+                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => await StopRecordingAsync());
+                 }
+             }
+             catch { }
+        }
+
+        private async Task FinalizeAndSaveRecording()
+        {
+            // Verify we have something to save
+            bool hasVideo = _currentVideoFile != null && File.Exists(_currentVideoFile);
+            bool hasAudioRec = _currentAudioFile != null && File.Exists(_currentAudioFile); // Not using file exists check strictly here as audio recorder might not flush yet? No, Stop() called.
+            
+            if (IsVideoMode && !hasVideo)
+            {
+                 System.Diagnostics.Debug.WriteLine("No video file recorded in video mode.");
+                 return;
+            }
+
+            try
+            {
+                 string timestamp = DateTime.Now.ToString("dd_MM_yyyy_HH_mm_ss");
+                 string outputFile;
+                 
+                 // Process Audio
+                 string? finalAudio = null;
+                 if (_currentAudioFile != null && _audioRecorder != null)
+                 {
+                     // Convert raw to wav/mp3 for merging
+                     finalAudio = _audioRecorder.FinalizeRecording(Path.GetDirectoryName(_currentAudioFile)!, "wav");
+                 }
+                 
+                 // Mic
+                 string? finalMic = _currentMicFile;
+                 if (finalMic != null && !File.Exists(finalMic)) finalMic = null;
+
+                 bool hasAudio = finalAudio != null && File.Exists(finalAudio);
+                 bool hasMic = finalMic != null && File.Exists(finalMic);
+
+                 if (IsVideoMode)
+                 {
+                     string finalFolder = _storageService.GetVideoFolder();
+                     string ext = _settingsService.CurrentSettings.Video.Format.ToLower();
+                     if (string.IsNullOrEmpty(ext)) ext = "mp4";
+                     
+                     outputFile = Path.Combine(finalFolder, $"Grabacion_de_Video_{timestamp}.{ext}");
+                     
+                     if (hasAudio || hasMic)
+                     {
+                         await MergeFiles(outputFile, _currentVideoFile!, finalAudio, finalMic);
+                     }
+                     else
+                     {
+                         // Video only
+                         if (File.Exists(outputFile)) File.Delete(outputFile);
+                         File.Move(_currentVideoFile!, outputFile);
+                     }
+                 }
+                 else
+                 {
+                     // Audio Only
+                     string finalFolder = _storageService.GetAudioFolder();
+                     string ext = _settingsService.CurrentSettings.Audio.Format.ToLower(); 
+                     if (string.IsNullOrEmpty(ext)) ext = "mp3";
+                     
+                     outputFile = Path.Combine(finalFolder, $"Grabacion_de_Audio_{timestamp}.{ext}");
+                     
+                     if (hasAudio && hasMic)
+                     {
+                         // Merge audio sources
+                         await MergeAudioOnly(outputFile, finalAudio!, finalMic!);
+                     }
+                     else if (hasAudio)
+                     {
+                         await ConvertAudio(outputFile, finalAudio!);
+                     }
+                     else if (hasMic)
+                     {
+                         await ConvertAudio(outputFile, finalMic!);
+                     }
+                     else
+                     {
+                         System.Diagnostics.Debug.WriteLine("No audio content to save.");
+                         return;
+                     }
+                 }
+                 
+                 // Cleanup
+                 if (_currentVideoFile != null && File.Exists(_currentVideoFile)) File.Delete(_currentVideoFile);
+                 if (finalAudio != null && File.Exists(finalAudio)) File.Delete(finalAudio);
+                 if (finalMic != null && File.Exists(finalMic)) File.Delete(finalMic);
+
+                 ClipSaved?.Invoke(this, outputFile);
+                 
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Error al guardar grabación: {ex.Message}");
+            }
+        }
+        
+        private async Task MergeFiles(string output, string video, string? audio, string? mic)
+        {
+            string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+            if (string.IsNullOrEmpty(ffmpeg)) return;
+            
+            string args;
+             if (audio != null && mic != null)
+            {
+                // Mix
+                 args = $"-i \"{video}\" -i \"{audio}\" -i \"{mic}\" " +
+                           $"-filter_complex \"[1:a][2:a]amix=inputs=2:duration=longest[a]\" " +
+                           $"-map 0:v -map \"[a]\" " +
+                           $"-c:v copy -c:a aac -b:a 192k " +
+                           $"-shortest \"{output}\"";
+            }
+            else if (audio != null)
+            {
+                 args = $"-i \"{video}\" -i \"{audio}\" " +
+                           $"-map 0:v -map 1:a " +
+                           $"-c:v copy -c:a aac -b:a 192k " +
+                           $"-shortest \"{output}\"";
+            }
+             else if (mic != null)
+            {
+                 args = $"-i \"{video}\" -i \"{mic}\" " +
+                           $"-map 0:v -map 1:a " +
+                           $"-c:v copy -c:a aac -b:a 192k " +
+                           $"-shortest \"{output}\"";
+            }
+            else 
+            {
+                return;
+            }
+            
+            await RunFFmpeg(ffmpeg, args);
+        }
+
+        private async Task MergeAudioOnly(string output, string audio1, string audio2)
+        {
+            string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+            if (string.IsNullOrEmpty(ffmpeg)) return;
+
+            string codecArgs = GetAudioCodecArgs(output);
+            string args = $"-i \"{audio1}\" -i \"{audio2}\" " +
+                          $"-filter_complex \"amix=inputs=2:duration=longest\" " +
+                          $"{codecArgs} \"{output}\"";
+
+            await RunFFmpeg(ffmpeg, args);
+        }
+
+        private async Task ConvertAudio(string output, string input)
+        {
+             string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+            if (string.IsNullOrEmpty(ffmpeg)) return;
+
+            string codecArgs = GetAudioCodecArgs(output);
+            string args = $"-i \"{input}\" {codecArgs} \"{output}\"";
+            await RunFFmpeg(ffmpeg, args);
+        }
+
+        private string GetAudioCodecArgs(string outputFile)
+        {
+            string ext = Path.GetExtension(outputFile).ToLower();
+            if (ext == ".flac") return "-c:a flac";
+            if (ext == ".wav") return "-c:a pcm_s16le";
+            return "-c:a libmp3lame -q:a 2"; // default to mp3
+        }
+
+        private async Task RunFFmpeg(string exe, string args)
+        {
+            var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = $"-y {args}",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            
+            if (p != null) await p.WaitForExitAsync();
+        }
+
+        public void ClearBuffer() { } // No-op now
+        public void UpdateBufferReservation() { } // No-op now
+        
+        // Legacy support if interface demands it
+        public Task SaveClipAsync(int durationSeconds, bool isVideo) 
+        {
+             // This was for "Instant Replay". 
+             // With direct recording, this might not be relevant unless we keep "Replay" feature.
+             // The user asked to "Remove buffer". so SaveClip (Instant Replay) is effectively gone?
+             // "Simplifying Recording Logic... removal of buffer"
+             // I will leave this as a stub or show a message that Replay is disabled.
+             System.Windows.MessageBox.Show("La grabación en buffer está desactivada en este modo simplificado.");
+             return Task.CompletedTask;
         }
 
         public void Dispose()
         {
-            try
-            {
-                _videoRecorder?.Dispose();
-                _audioRecorder?.Dispose();
-                _micRecorder?.Dispose();
-                
-                // Limpiar buffer al cerrar la aplicación
-                CleanBufferFolder();
-                
-                // Actualizar el espacio reservado al tamaño configurado (no borrar el archivo)
-                // Esto mantiene el .space_reservation pero ajusta su tamaño al valor inicial
-                string bufferPath = _settingsService.CurrentSettings.Paths.TempBuffer;
-                long bytesToReserve = _settingsService.CurrentSettings.Buffer.MaxBufferBytes;
-                Storage.DiskSpaceReservation.ReserveSpace(bufferPath, bytesToReserve);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error en Dispose: {ex.Message}");
-            }
+            _checkTimer?.Stop();
+             _videoRecorder?.Dispose();
+            _audioRecorder?.Dispose();
+             _micRecorder?.Dispose();
         }
 
-        public async Task SaveClipAsync(int durationSeconds, bool isVideo)
-        {
-            if (durationSeconds <= 0) durationSeconds = 30; // Default to 30s if invalid
-
-            if (_videoRecorder == null)
-            {
-                System.Windows.MessageBox.Show("El servicio de grabación no está inicializado.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            _storageService.EnsureDirectoriesExist();
-            string? outputFile = null;
-
-            try
-            {
-                if (isVideo)
-                {
-                    // Save video clip with audio from NAudio
-                    string videoFolder = _storageService.GetVideoFolder();
-                    string? audioTempFile = null;
-                    
-                    // First, save audio to a temp file if AudioRecorder is active
-                    if (_audioRecorder != null)
-                    {
-                        try
-                        {
-                            string tempFolder = Path.Combine(Path.GetTempPath(), "ClipStudio_AudioMerge");
-                            Directory.CreateDirectory(tempFolder);
-                            audioTempFile = _audioRecorder.SaveClip(durationSeconds, tempFolder);
-                            System.Diagnostics.Debug.WriteLine($"Audio saved to temp: {audioTempFile}");
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Could not save audio (continuing without): {ex.Message}");
-                            audioTempFile = null;
-                        }
-                    }
-                    
-                    // Save microphone audio to a temp file if MicrophoneRecorder is active
-                    string? micTempFile = null;
-                    if (_micRecorder != null)
-                    {
-                        try
-                        {
-                            string tempFolder = Path.Combine(Path.GetTempPath(), "ClipStudio_AudioMerge");
-                            Directory.CreateDirectory(tempFolder);
-                            micTempFile = _micRecorder.SaveClip(durationSeconds, tempFolder);
-                            System.Diagnostics.Debug.WriteLine($"Mic audio saved to temp: {micTempFile}");
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Could not save mic audio (continuing without): {ex.Message}");
-                            micTempFile = null;
-                        }
-                    }
-                    
-                    // Save video clip - pass audio files to merge
-                    outputFile = await _videoRecorder.SaveClipAsync(durationSeconds, videoFolder, audioTempFile, micTempFile);
-                    
-                    // Clean up temp audio files
-                    if (micTempFile != null)
-                    {
-                        try { File.Delete(micTempFile); } catch { }
-                    }
-                    
-                    // Clean up temp audio file
-                    if (audioTempFile != null)
-                    {
-                        try { File.Delete(audioTempFile); } catch { }
-                    }
-                }
-                else
-                {
-                    // Save audio-only clip using AudioRecorder directly
-                    if (_audioRecorder != null)
-                    {
-                        string audioFolder = _storageService.GetAudioFolder();
-                        outputFile = _audioRecorder.SaveClip(durationSeconds, audioFolder);
-                    }
-                    else
-                    {
-                        System.Windows.MessageBox.Show("El grabador de audio no está disponible.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-                }
-
-                if (outputFile != null)
-                {
-                    PlayNotificationSound();
-                    ClipSaved?.Invoke(this, outputFile);
-                }
-                else
-                {
-                    string clipType = isVideo ? "video" : "audio";
-                    System.Windows.MessageBox.Show($"No se pudo guardar el clip de {clipType}. Es posible que la grabación no esté activa o no haya suficiente buffer.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error saving clip: {ex.Message}");
-                string clipType = isVideo ? "video" : "audio";
-                System.Windows.MessageBox.Show($"Error al guardar el clip de {clipType}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-
-        private void PlayNotificationSound()
+        private void PlayNotificationSound(bool start)
         {
             if (_settingsService.CurrentSettings.General.PlaySoundOnClip)
             {
@@ -341,10 +423,7 @@ namespace ClipStudioDesktop.Services.Recording
                             }
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error playing sound: {ex.Message}");
-                    }
+                    catch { }
                 });
             }
         }

@@ -27,19 +27,22 @@ namespace ClipStudioDesktop.Views
             // Ensure focus for key events
             Loaded += (s, e) => 
             {
+                Activate();
                 Focus();
+                Keyboard.Focus(this);
                 // Initialize cursor position
                 var mousePos = Mouse.GetPosition(this);
                 Canvas.SetLeft(CustomCursorCanvas, mousePos.X);
                 Canvas.SetTop(CustomCursorCanvas, mousePos.Y);
             };
 
-            // Handle Escape to cancel
-            KeyDown += (s, e) => 
+            // Handle Escape to cancel (using PreviewKeyDown for higher priority)
+            PreviewKeyDown += (s, e) => 
             {
                 if (e.Key == Key.Escape)
                 {
                     IsConfirmed = false;
+                    e.Handled = true;
                     Close();
                 }
             };

@@ -23,7 +23,7 @@ namespace ClipStudioDesktop.Services.Storage
             Directory.CreateDirectory(paths.AudioClips);
             Directory.CreateDirectory(paths.VideoClips);
             Directory.CreateDirectory(paths.Screenshots);
-            Directory.CreateDirectory(paths.TempBuffer);
+            Directory.CreateDirectory(paths.Cache);
         }
     }
 }

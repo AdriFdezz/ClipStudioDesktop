@@ -7,5 +7,6 @@ namespace ClipStudioDesktop.Services.Screenshot
         Task CaptureFullScreenAsync();
         Task<bool> CaptureSelectionAsync();
         Task<bool> CaptureSelectionToClipboardAsync();
+        event System.EventHandler<string>? ScreenshotSaved;
     }
 }

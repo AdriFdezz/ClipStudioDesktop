@@ -57,7 +57,7 @@ namespace ClipStudioDesktop.Services.Settings
             // Check for Alt+V (Clipboard Selection)
             if (!settings.Hotkeys.Exists(h => h.Type == "screenshot" && h.Mode == "selection_clipboard"))
             {
-                settings.Hotkeys.Add(new HotKeyConfig { Key = "Alt+V", Type = "screenshot", Mode = "selection_clipboard" });
+                settings.Hotkeys.Add(new HotKeyConfig { Key = "Alt+C", Type = "screenshot", Mode = "selection_clipboard" });
                 changed = true;
             }
 
@@ -88,21 +88,12 @@ namespace ClipStudioDesktop.Services.Settings
             // Initialize default hotkeys
             CurrentSettings.Hotkeys = new List<HotKeyConfig>
             {
-                new() { Key = "Ctrl+Shift+1", Type = "audio", Duration = 30 },
-                new() { Key = "Ctrl+Shift+2", Type = "audio", Duration = 60 },
-                new() { Key = "Ctrl+Shift+3", Type = "audio", Duration = 90 },
-                new() { Key = "Ctrl+Shift+4", Type = "audio", Duration = 120 },
-                new() { Key = "Ctrl+Shift+5", Type = "audio", Duration = 180 },
-                
-                new() { Key = "Alt+Shift+1", Type = "video", Duration = 30 },
-                new() { Key = "Alt+Shift+2", Type = "video", Duration = 60 },
-                new() { Key = "Alt+Shift+3", Type = "video", Duration = 90 },
-                new() { Key = "Alt+Shift+4", Type = "video", Duration = 120 },
-                new() { Key = "Alt+Shift+5", Type = "video", Duration = 180 },
+                new() { Key = "Ctrl+Alt+A", Type = "audio", Duration = 0 },
+                new() { Key = "Ctrl+Alt+V", Type = "video", Duration = 0 },
                 
                 new() { Key = "Alt+X", Type = "screenshot", Mode = "selection" },
-                new() { Key = "Alt+C", Type = "screenshot", Mode = "fullscreen" },
-                new() { Key = "Alt+V", Type = "screenshot", Mode = "selection_clipboard" }
+                new() { Key = "Alt+V", Type = "screenshot", Mode = "fullscreen" },
+                new() { Key = "Alt+C", Type = "screenshot", Mode = "selection_clipboard" }
             };
 
             SaveSettings();
