@@ -8,7 +8,7 @@
 
 ![Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-22c55e)
+![License](https://img.shields.io/badge/License-Proprietary-red)
 ![Release](https://img.shields.io/badge/Release-v1.0.0-blue)
 
 [📦 Descargar](#instalacion) • [🚀 Características](#caracteristicas) • [⌨️ Atajos](#atajos) • [📖 Docs](clip-studio-desktop-spec.md)
@@ -276,7 +276,7 @@ Incluye:
 
 ## 📄 Licencia
 
-Este proyecto está bajo la licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+Este proyecto es **software gratuito**. Puedes compartirlo libremente, pero **está prohibido su uso comercial y la modificación del código**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
 
 ---
 
