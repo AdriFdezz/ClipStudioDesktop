@@ -607,7 +607,8 @@ namespace ClipStudioDesktop.ViewModels
             
             if (fileName != null && System.IO.File.Exists(fileName))
             {
-                Process.Start(fileName);
+                // Pasar --show-ui para indicar que debe mostrar la ventana de configuración
+                Process.Start(fileName, "--show-ui");
                 System.Windows.Application.Current.Shutdown();
             }
         }

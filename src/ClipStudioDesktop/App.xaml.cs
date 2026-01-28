@@ -109,7 +109,14 @@ namespace ClipStudioDesktop
             // Inicializar ViewModel y Ventana Principal
             _mainViewModel = new MainViewModel(_settingsService, _storageService, _recordingService);
             _mainWindow = new Views.MainWindow(_mainViewModel);
-            _mainWindow.Show();
+            
+            // Solo mostrar la ventana si se inició con --show-ui (reinicio desde configuración)
+            // De lo contrario, iniciar en segundo plano (solo bandeja del sistema)
+            bool showUI = e.Args.Contains("--show-ui");
+            if (showUI)
+            {
+                _mainWindow.Show();
+            }
 
             // Asegurar existencia de directorios
             _storageService.EnsureDirectoriesExist();
