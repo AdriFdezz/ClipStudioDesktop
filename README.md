@@ -83,7 +83,7 @@ Puedes ajustar el espacio reservado desde la pestaña **Audio y Video** en la co
 
 - **Mínimo**: 1 GB
 - **Por defecto**: 5 GB
-- **Máximo**: Sin límite (depende de tu disco)
+- **Ilimitado**: Coloca `0` para usar todo el espacio disponible en disco
 
 > 💡 **Tip**: Si grabas sesiones largas, aumenta el espacio reservado. Si tienes poco espacio en disco, puedes reducirlo.
 

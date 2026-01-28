@@ -32,7 +32,7 @@ namespace ClipStudioDesktop.Services.Screenshot
         /// <summary>
         /// Captura la pantalla completa basándose en la configuración actual (monitor específico, todos, o primario).
         /// </summary>
-        public Task CaptureFullScreenAsync()
+        public async Task CaptureFullScreenAsync()
         {
             try
             {
@@ -83,7 +83,11 @@ namespace ClipStudioDesktop.Services.Screenshot
                     }
                 }
 
-                if (width == 0 || height == 0) return Task.CompletedTask;
+                if (width == 0 || height == 0) return;
+
+                // Invocar evento para ocultar notificaciones antes de capturar
+                BeforeCapture?.Invoke(this, EventArgs.Empty);
+                await Task.Delay(100); // Dar tiempo a Windows para ocultar el balloon
 
                 // Realizar captura con GDI+
                 using (Bitmap bitmap = new Bitmap(width, height))
@@ -100,8 +104,6 @@ namespace ClipStudioDesktop.Services.Screenshot
             {
                 System.Diagnostics.Debug.WriteLine($"Error capturing full screen: {ex.Message}");
             }
-
-            return Task.CompletedTask;
         }
 
         [System.Runtime.InteropServices.DllImport("gdi32.dll")]
@@ -128,6 +130,10 @@ namespace ClipStudioDesktop.Services.Screenshot
                 int screenTop = (int)SystemParameters.VirtualScreenTop;
                 int screenWidth = (int)SystemParameters.VirtualScreenWidth;
                 int screenHeight = (int)SystemParameters.VirtualScreenHeight;
+
+                // Invocar evento para ocultar notificaciones antes de capturar
+                BeforeCapture?.Invoke(this, EventArgs.Empty);
+                await Task.Delay(100); // Dar tiempo a Windows para ocultar el balloon
 
                 Bitmap fullScreenBitmap = new Bitmap(screenWidth, screenHeight);
                 using (Graphics g = Graphics.FromImage(fullScreenBitmap))
@@ -219,6 +225,7 @@ namespace ClipStudioDesktop.Services.Screenshot
                     
                     System.Windows.Clipboard.SetImage(source);
                     PlayShutterSound();
+                    ClipboardCopied?.Invoke(this, EventArgs.Empty);
                 }
                 finally
                 {
@@ -232,6 +239,8 @@ namespace ClipStudioDesktop.Services.Screenshot
         }
 
         public event EventHandler<string>? ScreenshotSaved;
+        public event EventHandler? ClipboardCopied;
+        public event EventHandler? BeforeCapture;
 
         /// <summary>
         /// Guarda el bitmap capturado en disco, aplicando el formato seleccionado (JPG/PNG).

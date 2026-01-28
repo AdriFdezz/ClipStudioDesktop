@@ -252,6 +252,26 @@ namespace ClipStudioDesktop
                 });
             };
 
+            // Suscribirse a evento ClipboardCopied
+            _screenshotService.ClipboardCopied += (s, e) =>
+            {
+                this.Dispatcher.Invoke(() =>
+                {
+                    ShowNotification("Captura Copiada", "Selección copiada al portapapeles");
+                });
+            };
+
+            // Suscribirse a evento BeforeCapture para ocultar notificaciones antes de la captura
+            _screenshotService.BeforeCapture += (s, e) =>
+            {
+                this.Dispatcher.Invoke(() =>
+                {
+                    // Cancelar timer de cierre automático y ocultar inmediatamente
+                    _notificationCts?.Cancel();
+                    _taskbarIcon?.HideBalloonTip();
+                });
+            };
+
             // Manejadores de Clic
             videoItem.Click += async (s, args) => 
             {
@@ -369,12 +389,43 @@ namespace ClipStudioDesktop
             System.Diagnostics.Debug.WriteLine($"Atajos registrados: {successCount} exitosos, {failCount} fallidos");
         }
 
-        private void ShowNotification(string title, string message, string? filePath = null)
+        private System.Threading.CancellationTokenSource? _notificationCts;
+
+        private async void ShowNotification(string title, string message, string? filePath = null)
         {
             if (_settingsService.CurrentSettings.General.ShowNotifications && _taskbarIcon != null)
             {
+                // Cancelar cualquier notificación/temporizador previo
+                _notificationCts?.Cancel();
+                _notificationCts = new System.Threading.CancellationTokenSource();
+                var token = _notificationCts.Token;
+
                 _lastSavedFilePath = filePath;
-                _taskbarIcon.ShowBalloonTip(title, message, BalloonIcon.Info);
+                
+                try
+                {
+                    // 1. Ocultar notificación anterior inmediatamente
+                    _taskbarIcon.HideBalloonTip();
+                    
+                    // Pequeña espera para asegurar que Windows procese el cierre (evita "glitches" si es muy rápido)
+                    await Task.Delay(50, token);
+                    
+                    // 2. Mostrar nueva notificación
+                    _taskbarIcon.ShowBalloonTip(title, message, BalloonIcon.Info);
+
+                    // 3. Esperar 3 segundos
+                    await Task.Delay(3000, token);
+
+                    // 4. Ocultar si nadie más nos canceló
+                    if (!token.IsCancellationRequested)
+                    {
+                        _taskbarIcon.HideBalloonTip();
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    // Ignorar, significa que una nueva notificación tomó el control
+                }
             }
         }
 

@@ -30,5 +30,15 @@ namespace ClipStudioDesktop.Services.Screenshot
         /// Provee la ruta del archivo generado.
         /// </summary>
         event System.EventHandler<string>? ScreenshotSaved;
+
+        /// <summary>
+        /// Evento que se dispara cuando una captura se ha copiado exitosamente al portapapeles.
+        /// </summary>
+        event System.EventHandler? ClipboardCopied;
+
+        /// <summary>
+        /// Evento que se dispara ANTES de realizar una captura de pantalla (para ocultar notificaciones, etc.).
+        /// </summary>
+        event System.EventHandler? BeforeCapture;
     }
 }
