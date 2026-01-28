@@ -56,36 +56,27 @@ Todo esto sin interrumpir tu flujo de trabajo. La aplicación vive en la **bande
 
 ---
 
-## 💾 Espacio Reservado (Buffer)
+## ⚠️ Límite de Seguridad (Buffer)
 
-Clip Studio Desktop utiliza un sistema de **espacio reservado en disco** para garantizar que siempre haya espacio disponible para tus grabaciones. 
+Clip Studio Desktop incluye un sistema de seguridad para proteger el espacio de tu disco duro durante grabaciones largas.
 
 ### ¿Cómo funciona?
 
-1. **Al iniciar**, la aplicación reserva un espacio en tu disco (configurable)
-2. **Durante la grabación**, los archivos temporales se almacenan en este espacio
-3. **Al finalizar**, el archivo se convierte al formato final y se mueve a tu carpeta de clips
-4. **El espacio se libera** automáticamente cuando ya no se necesita
+NO se reserva espacio real en el disco. En su lugar, la aplicación monitorea el tamaño del archivo mientras grabas:
 
-### Capacidad Real
-
-> 📊 **Basado en pruebas reales** con la configuración por defecto:
-
-| Espacio Reservado | Duración Aproximada |
-|-------------------|---------------------|
-| **5 GB** (por defecto) | **5+ minutos** de video |
-
-*Configuración de prueba: MP4, 1080p, 60 FPS, 15000 kbps*
+1. **Configuras un límite** (ej. 5 GB)
+2. **Si la grabación alcanza ese tamaño**, se detiene automáticamente y se guarda
+3. **Evita que llenes el disco** por accidente si olvidas detener una grabación
 
 ### Configuración
 
-Puedes ajustar el espacio reservado desde la pestaña **Audio y Video** en la configuración:
+Puedes ajustar este límite desde la pestaña **Audio y Video**:
 
 - **Mínimo**: 1 GB
 - **Por defecto**: 5 GB
-- **Ilimitado**: Coloca `0` para usar todo el espacio disponible en disco
+- **Ilimitado**: Coloca `0` para desactivar el límite y grabar hasta llenar el disco
 
-> 💡 **Tip**: Si grabas sesiones largas, aumenta el espacio reservado. Si tienes poco espacio en disco, puedes reducirlo.
+> 💡 **Tip**: Usa el valor `0` (Ilimitado) si planeas hacer grabaciones muy largas y tienes espacio de sobra.
 
 ## 🎨 Formatos Soportados
 
