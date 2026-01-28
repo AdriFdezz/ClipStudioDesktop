@@ -15,13 +15,13 @@ namespace ClipStudioDesktop.Services.Recording
     {
         private readonly ISettingsService _settingsService;
         private readonly IStorageService _storageService;
-        private FFmpegRecorder? _videoRecorder;
-        private AudioRecorder? _audioRecorder;
+        private SharpAviRecorder? _nativeRecorder;
+        private AudioRecorder? _audioRecorder; // Kept for Audio Only Mode
         private MicrophoneRecorder? _micRecorder;
         private System.Timers.Timer? _checkTimer;
         
         // Tracking current recording files
-        private string? _currentVideoFile;
+        private string? _currentVideoFile; // AVI or MP4
         private string? _currentAudioFile;
         private string? _currentMicFile;
         
@@ -33,7 +33,7 @@ namespace ClipStudioDesktop.Services.Recording
             _storageService = storageService;
             
             // Initialize recorders
-            _videoRecorder = new FFmpegRecorder(_settingsService.CurrentSettings);
+            _nativeRecorder = new SharpAviRecorder(); // Native
             _audioRecorder = new AudioRecorder(_settingsService.CurrentSettings);
             
             // Safety Check Timer (runs every 10s to check size limit)
@@ -41,10 +41,13 @@ namespace ClipStudioDesktop.Services.Recording
             _checkTimer.Elapsed += CheckRecordingLimit;
         }
 
+
+
         public bool IsRecording { get; private set; }
+        public DateTime? CurrentRecordingStartTime { get; private set; }
         public event EventHandler<bool>? RecordingStateChanged;
         public event EventHandler<string>? ClipSaved;
-        public event EventHandler<(long Estimated, long Physical)>? BufferSizeChanged; // Legacy name, repurposed for current size updates
+        public event EventHandler<(long Estimated, long Physical)>? BufferSizeChanged; 
 
         public bool IsVideoMode { get; private set; } = true;
 
@@ -58,9 +61,8 @@ namespace ClipStudioDesktop.Services.Recording
                 }
                 else
                 {
-                    // Switch mode: Stop then Start new mode
                     await StopRecordingAsync();
-                    await Task.Delay(500); // Give a moment to cleanup
+                    await Task.Delay(500); 
                     await StartRecordingAsync(videoEnabled);
                 }
             }
@@ -83,24 +85,56 @@ namespace ClipStudioDesktop.Services.Recording
                 
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 
-                // 1. Start Video (Only if videoEnabled)
                 if (IsVideoMode)
                 {
-                    string ext = _settingsService.CurrentSettings.Video.Format.ToLower();
-                    if (string.IsNullOrEmpty(ext)) ext = "mp4";
+                    _currentAudioFile = null;
                     
-                    _currentVideoFile = Path.Combine(tempFolder, $"rec_video_{timestamp}.{ext}");
-                    _videoRecorder?.StartRecording(_currentVideoFile);
+                    // NATIVE RECORDING (SHARP AVI)
+                    // Records Video + Desktop Audio to single AVI
+                    // We record AVI Raw/MJPEG to temp folder first
+                    string tempAvi = Path.Combine(tempFolder, $"temp_raw_{timestamp}.avi");
+                    _currentVideoFile = tempAvi;
+                    
+                    // Get FPS from settings
+                    int fps = _settingsService.CurrentSettings.Video.Framerate;
+                    if (fps <= 0) fps = 30; // Safety default
+                    
+                    // Calculate Scaled Quality based on Bitrate
+                    // Range: Bitrate 4000 -> Quality 50 (Efficient)
+                    //        Bitrate 15000 -> Quality 80 (High, but avoids exponential size of 90+)
+                    // MJPEG size at Q90 is double Q80. Q80 is visually sufficient for temp.
+                    int targetBitrate = _settingsService.CurrentSettings.Video.Bitrate;
+                    if (targetBitrate <= 0) targetBitrate = 8000;
+                    
+                    int quality = 50; // Base (Start lower for space saving)
+                    if (targetBitrate > 4000)
+                    {
+                        // Linear interpolation: +30 quality for +11000 bitrate
+                        double ratio = (double)(targetBitrate - 4000) / 11000.0;
+                        if (ratio > 1.0) ratio = 1.0;
+                        quality += (int)(ratio * 30); // Max 50+30=80
+                    }
+                    
+                    // Note: SharpAviRecorder Start is synchronous but fast
+                    _nativeRecorder?.StartRecording(tempAvi, fps, quality, recordAudio: true);
                 }
                 else
                 {
+                    // Audio Only Mode - Classic behavior logic preserved or updated?
+                    // Task says "AudioRecorder refactoring" was done for direct recording.
+                    // We prefer keeping AudioRecorder separate for pure audio to avoid video overhead.
                     _currentVideoFile = null;
+                    
+                    string ext = _settingsService.CurrentSettings.Audio.Format.ToLower(); 
+                    if (string.IsNullOrEmpty(ext)) ext = "wav"; // Raw capture is usually WAV
+
+                    _currentAudioFile = Path.Combine(tempFolder, $"rec_audio_{timestamp}.{ext}");
+                    if (_audioRecorder != null)
+                    {
+                        var success = _audioRecorder.Start(_currentAudioFile);
+                        if (!success) throw new Exception("Failed to start audio recorder");
+                    }
                 }
-                
-                // 2. Start Desktop Audio
-                _currentAudioFile = Path.Combine(tempFolder, $"rec_audio_{timestamp}.raw");
-                bool audioStarted = _audioRecorder?.Start(_currentAudioFile) ?? false;
-                if (!audioStarted) _currentAudioFile = null;
 
                 // 3. Start Mic (if enabled)
                 if (_settingsService.CurrentSettings.Audio.EnableMicrophone)
@@ -118,15 +152,16 @@ namespace ClipStudioDesktop.Services.Recording
                     _currentMicFile = null;
                 }
                 
-                // Set limit
                 _maxSizeBytes = _settingsService.CurrentSettings.Buffer.MaxBufferBytes;
-                if (_maxSizeBytes <= 0) _maxSizeBytes = 10L * 1024 * 1024 * 1024; 
+                // If 0, it means unlimited. logic handled in CheckRecordingLimit.
+                // if (_maxSizeBytes <= 0) _maxSizeBytes = 10L * 1024 * 1024 * 1024; // REMOVED arbitrary 10GB default override 
 
                 IsRecording = true;
+                CurrentRecordingStartTime = DateTime.Now;
                 RecordingStateChanged?.Invoke(this, IsRecording);
                 _checkTimer?.Start();
                 
-                System.Diagnostics.Debug.WriteLine($"Direct Recording Started (Video: {IsVideoMode})");
+                System.Diagnostics.Debug.WriteLine($"Native Recording Started (Video: {IsVideoMode})");
             }
             catch (Exception ex)
             {
@@ -143,15 +178,24 @@ namespace ClipStudioDesktop.Services.Recording
             {
                 _checkTimer?.Stop();
                 
-                // Stop all recorders
-                await (_videoRecorder?.Stop() ?? Task.CompletedTask);
-                _audioRecorder?.Stop();
-                 _micRecorder?.Stop();
+                // Stop Native Recorder
+                if (IsVideoMode)
+                {
+                    _nativeRecorder?.Stop();
+                }
+                else
+                {
+                    _audioRecorder?.Stop();
+                }
+
+                _micRecorder?.Stop();
+                _micRecorder?.FinalizeRecording();
                 
                 IsRecording = false;
+                CurrentRecordingStartTime = null;
                 RecordingStateChanged?.Invoke(this, IsRecording);
 
-                // Finalize and Merge
+                // Finalize (AVI -> MP4)
                 await FinalizeAndSaveRecording();
             }
             catch (Exception ex)
@@ -193,9 +237,9 @@ namespace ClipStudioDesktop.Services.Recording
                  BufferSizeChanged?.Invoke(this, (displaySize, physicalSize));
                  
                  // Safety Check with PHYSICAL size (Disk usage)
-                 if (physicalSize > _maxSizeBytes)
+                 if (_maxSizeBytes > 0 && physicalSize > _maxSizeBytes)
                  {
-                     System.Diagnostics.Debug.WriteLine("Safety limit reached. Stopping recording.");
+                     System.Diagnostics.Debug.WriteLine($"Safety limit reached ({physicalSize} > {_maxSizeBytes}). Stopping recording.");
                      await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => await StopRecordingAsync());
                  }
              }
@@ -229,11 +273,24 @@ namespace ClipStudioDesktop.Services.Recording
                  
                  // Mic
                  string? finalMic = _currentMicFile;
-                 if (finalMic != null && !File.Exists(finalMic)) finalMic = null;
+                 if (finalMic != null && File.Exists(finalMic))
+                 {
+                     if (new FileInfo(finalMic).Length < 1024) 
+                     {
+                         // If less than 1KB, assumes empty/invalid
+                         finalMic = null; 
+                     }
+                 }
+                 else
+                 {
+                     finalMic = null;
+                 }
 
                  bool hasAudio = finalAudio != null && File.Exists(finalAudio);
                  bool hasMic = finalMic != null && File.Exists(finalMic);
 
+                // FinalizeAndSaveRecording Logic Update for SharpAvi
+                
                  if (IsVideoMode)
                  {
                      string finalFolder = _storageService.GetVideoFolder();
@@ -242,53 +299,68 @@ namespace ClipStudioDesktop.Services.Recording
                      
                      outputFile = Path.Combine(finalFolder, $"Grabacion_de_Video_{timestamp}.{ext}");
                      
-                     if (hasAudio || hasMic)
+                     // _currentVideoFile is now the temp AVI (Raw + Audio)
+                     // Usage: FFmpeg to convert AVI -> MP4 (H264/AAC)
+                     
+                     // Check if mic exists to merge
+                     if (hasMic)
                      {
-                         await MergeFiles(outputFile, _currentVideoFile!, finalAudio, finalMic);
+                         // Merge AVI + Mic -> MP4
+                         await MergeMicToVideo(outputFile, _currentVideoFile!, finalMic!);
                      }
                      else
                      {
-                         // Video only
-                         if (File.Exists(outputFile)) File.Delete(outputFile);
-                         File.Move(_currentVideoFile!, outputFile);
+                         // Transcode AVI -> MP4
+                         int bitrate = _settingsService.CurrentSettings.Video.Bitrate;
+                         if (bitrate <= 0) bitrate = 8000;
+                         
+                         await ConvertAviToFinal(outputFile, _currentVideoFile!, bitrate);
                      }
                  }
                  else
                  {
-                     // Audio Only
+                     // Audio logic remains same
                      string finalFolder = _storageService.GetAudioFolder();
-                     string ext = _settingsService.CurrentSettings.Audio.Format.ToLower(); 
+                     string ext = _settingsService.CurrentSettings.Audio.Format.ToLower();
                      if (string.IsNullOrEmpty(ext)) ext = "mp3";
                      
                      outputFile = Path.Combine(finalFolder, $"Grabacion_de_Audio_{timestamp}.{ext}");
                      
-                     if (hasAudio && hasMic)
-                     {
-                         // Merge audio sources
-                         await MergeAudioOnly(outputFile, finalAudio!, finalMic!);
-                     }
-                     else if (hasAudio)
-                     {
-                         await ConvertAudio(outputFile, finalAudio!);
-                     }
-                     else if (hasMic)
-                     {
-                         await ConvertAudio(outputFile, finalMic!);
-                     }
-                     else
-                     {
-                         System.Diagnostics.Debug.WriteLine("No audio content to save.");
-                         return;
-                     }
+                     if (hasAudio && hasMic) await MergeAudioOnly(outputFile, finalAudio!, finalMic!);
+                     else if (hasAudio) await ConvertAudio(outputFile, finalAudio!);
+                     else if (hasMic) await ConvertAudio(outputFile, finalMic!);
+                     else return;
                  }
                  
                  // Cleanup
-                 if (_currentVideoFile != null && File.Exists(_currentVideoFile)) File.Delete(_currentVideoFile);
-                 if (finalAudio != null && File.Exists(finalAudio)) File.Delete(finalAudio);
-                 if (finalMic != null && File.Exists(finalMic)) File.Delete(finalMic);
+                 try 
+                 {
+                     if (_currentVideoFile != null && File.Exists(_currentVideoFile) && _currentVideoFile != outputFile) File.Delete(_currentVideoFile);
+                     // Delete audio raw files if they exist (Audio Only mode)
+                     if (!IsVideoMode && _currentAudioFile != null && File.Exists(_currentAudioFile)) File.Delete(_currentAudioFile);
+                     
+                     if (finalAudio != null && File.Exists(finalAudio)) File.Delete(finalAudio);
+                     if (finalMic != null && File.Exists(finalMic)) File.Delete(finalMic);
+                 }
+                 catch (Exception cleanupEx) 
+                 { 
+                     System.Diagnostics.Debug.WriteLine($"Cleanup error: {cleanupEx.Message}"); 
+                 }
 
                  ClipSaved?.Invoke(this, outputFile);
                  
+            }
+            catch (OperationCanceledException)
+            {
+                // User cancelled conversion - cleanup temp files silently
+                System.Diagnostics.Debug.WriteLine("[Recording] Conversion cancelled by user");
+                try 
+                {
+                    if (_currentVideoFile != null && File.Exists(_currentVideoFile)) File.Delete(_currentVideoFile);
+                    if (_currentAudioFile != null && File.Exists(_currentAudioFile)) File.Delete(_currentAudioFile);
+                    if (_currentMicFile != null && File.Exists(_currentMicFile)) File.Delete(_currentMicFile);
+                }
+                catch { }
             }
             catch (Exception ex)
             {
@@ -361,20 +433,253 @@ namespace ClipStudioDesktop.Services.Recording
             string ext = Path.GetExtension(outputFile).ToLower();
             if (ext == ".flac") return "-c:a flac";
             if (ext == ".wav") return "-c:a pcm_s16le";
+            if (ext == ".ogg") return "-c:a libvorbis -q:a 6";
             return "-c:a libmp3lame -q:a 2"; // default to mp3
+        }
+
+        private async Task ConvertAviToFinal(string output, string inputAvi, int vBitrate)
+        {
+             string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+            if (string.IsNullOrEmpty(ffmpeg)) return;
+
+             int aBitrate = _settingsService.CurrentSettings.Audio.Bitrate;
+             if (aBitrate <= 0) aBitrate = 192;
+             
+             string resolution = _settingsService.CurrentSettings.Video.Resolution;
+             string scaleFilter = "";
+             if (!string.IsNullOrEmpty(resolution) && resolution.Contains("x") && resolution != "Native")
+             {
+                 scaleFilter = $"-s {resolution}";
+             }
+
+            string ext = Path.GetExtension(output).ToLower();
+            string args;
+            
+            if (ext == ".webm")
+            {
+                // WebM: VP9 video + Opus audio
+                args = $"-i \"{inputAvi}\" -c:v libvpx-vp9 -b:v {vBitrate}k {scaleFilter} " +
+                       $"-c:a libopus -b:a {aBitrate}k " +
+                       $"\"{output}\"";
+            }
+            else
+            {
+                // MP4/MKV: H264 video + AAC audio
+                args = $"-i \"{inputAvi}\" -c:v libx264 -preset ultrafast -pix_fmt yuv420p " +
+                       $"-b:v {vBitrate}k -maxrate {vBitrate}k -bufsize {vBitrate * 2}k {scaleFilter} " +
+                       $"-c:a aac -b:a {aBitrate}k " +
+                       $"-movflags +faststart \"{output}\"";
+            }
+            
+            await RunFFmpegWithProgress(ffmpeg, args, inputAvi, output);
         }
 
         private async Task RunFFmpeg(string exe, string args)
         {
-            var p = Process.Start(new ProcessStartInfo
+            try
             {
-                FileName = exe,
-                Arguments = $"-y {args}",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            });
+                System.Diagnostics.Debug.WriteLine($"[FFmpeg] Starting: {args}");
+                var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = $"-y {args}",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                });
+                
+                if (p != null) 
+                {
+                    string stderr = await p.StandardError.ReadToEndAsync();
+                    await p.WaitForExitAsync();
+                    
+                    if (p.ExitCode != 0)
+                    {
+                         System.Diagnostics.Debug.WriteLine($"[FFmpeg] ERROR (Exit {p.ExitCode}): {stderr}");
+                         throw new Exception($"FFmpeg failed with code {p.ExitCode}. Log: {stderr}");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[FFmpeg] Success. Log: {stderr}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FFmpeg] Exception: {ex.Message}");
+                throw;
+            }
+        }
+
+        private async Task RunFFmpegWithProgress(string exe, string args, string inputFile, string outputFile)
+        {
+            Views.ProcessingWindow? progressWindow = null;
+            Process? p = null;
+            bool wasCancelled = false;
             
-            if (p != null) await p.WaitForExitAsync();
+            try
+            {
+                // Get input duration for progress calculation
+                TimeSpan totalDuration = await GetMediaDuration(exe, inputFile);
+                
+                // Show progress window on UI thread
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    progressWindow = new Views.ProcessingWindow();
+                    progressWindow.CancellationRequested += (s, e) =>
+                    {
+                        wasCancelled = true;
+                        try
+                        {
+                            if (p != null && !p.HasExited)
+                            {
+                                p.Kill();
+                            }
+                        }
+                        catch { }
+                    };
+                    progressWindow.Show();
+                });
+
+                System.Diagnostics.Debug.WriteLine($"[FFmpeg] Starting with progress: {args}");
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = $"-y {args}",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                };
+
+                p = Process.Start(psi);
+                if (p == null) return;
+
+                DateTime startTime = DateTime.Now;
+                
+                // Read stderr line by line for progress
+                var stderrTask = Task.Run(async () =>
+                {
+                    var reader = p.StandardError;
+                    char[] buffer = new char[256];
+                    string accumulated = "";
+                    
+                    while (!p.HasExited || reader.Peek() >= 0)
+                    {
+                        int read = await reader.ReadAsync(buffer, 0, buffer.Length);
+                        if (read > 0)
+                        {
+                            accumulated += new string(buffer, 0, read);
+                            
+                            // Parse progress from FFmpeg output
+                            // Format: frame=  120 fps=30 time=00:00:04.00 bitrate=8000kbps speed=1.5x
+                            var timeMatch = System.Text.RegularExpressions.Regex.Match(accumulated, @"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})");
+                            var speedMatch = System.Text.RegularExpressions.Regex.Match(accumulated, @"speed=\s*([\d.]+)x");
+                            
+                            if (timeMatch.Success && totalDuration.TotalSeconds > 0)
+                            {
+                                int hours = int.Parse(timeMatch.Groups[1].Value);
+                                int mins = int.Parse(timeMatch.Groups[2].Value);
+                                int secs = int.Parse(timeMatch.Groups[3].Value);
+                                int centis = int.Parse(timeMatch.Groups[4].Value);
+                                
+                                TimeSpan currentTime = new TimeSpan(0, hours, mins, secs, centis * 10);
+                                double percent = (currentTime.TotalSeconds / totalDuration.TotalSeconds) * 100;
+                                
+                                TimeSpan? remaining = null;
+                                if (speedMatch.Success && double.TryParse(speedMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double speed) && speed > 0)
+                                {
+                                    double remainingSeconds = (totalDuration.TotalSeconds - currentTime.TotalSeconds) / speed;
+                                    remaining = TimeSpan.FromSeconds(remainingSeconds);
+                                }
+                                
+                                progressWindow?.UpdateProgress(percent, remaining);
+                            }
+                            
+                            // Keep last 500 chars to avoid memory growth
+                            if (accumulated.Length > 500)
+                                accumulated = accumulated.Substring(accumulated.Length - 500);
+                        }
+                        else
+                        {
+                            await Task.Delay(50);
+                        }
+                    }
+                });
+
+                await p.WaitForExitAsync();
+                await stderrTask;
+
+                if (wasCancelled)
+                {
+                    // Delete partial output file created by FFmpeg
+                    try
+                    {
+                        if (File.Exists(outputFile))
+                        {
+                            File.Delete(outputFile);
+                            System.Diagnostics.Debug.WriteLine($"[FFmpeg] Deleted partial output file: {outputFile}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[FFmpeg] Failed to delete output file: {ex.Message}");
+                    }
+                    
+                    // User cancelled - throw to signal cancellation
+                    throw new OperationCanceledException("Conversion cancelled by user");
+                }
+
+                if (p.ExitCode != 0)
+                {
+                    throw new Exception($"FFmpeg failed with code {p.ExitCode}");
+                }
+            }
+            finally
+            {
+                // Close progress window on UI thread
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    progressWindow?.CloseWithoutConfirmation();
+                });
+            }
+        }
+
+        private async Task<TimeSpan> GetMediaDuration(string ffmpegPath, string inputFile)
+        {
+            try
+            {
+                // Use ffprobe-like query with ffmpeg
+                var psi = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = $"-i \"{inputFile}\" -hide_banner",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true
+                };
+
+                var p = Process.Start(psi);
+                if (p == null) return TimeSpan.Zero;
+
+                string stderr = await p.StandardError.ReadToEndAsync();
+                await p.WaitForExitAsync();
+
+                // Parse duration from: Duration: 00:01:30.50, start: 0.000000
+                var match = System.Text.RegularExpressions.Regex.Match(stderr, @"Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2})");
+                if (match.Success)
+                {
+                    int hours = int.Parse(match.Groups[1].Value);
+                    int mins = int.Parse(match.Groups[2].Value);
+                    int secs = int.Parse(match.Groups[3].Value);
+                    int centis = int.Parse(match.Groups[4].Value);
+                    return new TimeSpan(0, hours, mins, secs, centis * 10);
+                }
+            }
+            catch { }
+            
+            return TimeSpan.Zero;
         }
 
         public void ClearBuffer() { } // No-op now
@@ -395,7 +700,7 @@ namespace ClipStudioDesktop.Services.Recording
         public void Dispose()
         {
             _checkTimer?.Stop();
-             _videoRecorder?.Dispose();
+             _nativeRecorder?.Dispose();
             _audioRecorder?.Dispose();
              _micRecorder?.Dispose();
         }
@@ -426,6 +731,58 @@ namespace ClipStudioDesktop.Services.Recording
                     catch { }
                 });
             }
+        }
+        private void OnAudioDataAvailable(byte[] buffer, int count)
+        {
+             // No-op
+        }
+        
+        private async Task MergeMicToVideo(string output, string videoInput, string micInput)
+        {
+             string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+             if (string.IsNullOrEmpty(ffmpeg)) return;
+             
+             // Settings
+             int vBitrate = _settingsService.CurrentSettings.Video.Bitrate;
+             if (vBitrate <= 0) vBitrate = 8000;
+             
+             int aBitrate = _settingsService.CurrentSettings.Audio.Bitrate;
+             if (aBitrate <= 0) aBitrate = 192;
+             
+             string resolution = _settingsService.CurrentSettings.Video.Resolution;
+             string scaleFilter = "";
+             if (!string.IsNullOrEmpty(resolution) && resolution.Contains("x") && resolution != "Native")
+             {
+                 scaleFilter = $"-s {resolution}";
+             }
+
+             string ext = Path.GetExtension(output).ToLower();
+             string args;
+             
+             if (ext == ".webm")
+             {
+                 // WebM: VP9 video + Opus audio (mix system + mic)
+                 args = $"-i \"{videoInput}\" -i \"{micInput}\" " +
+                        $"-filter_complex \"[0:a][1:a]amix=inputs=2:duration=longest[a]\" " +
+                        $"-map 0:v -map \"[a]\" " +
+                        $"-c:v libvpx-vp9 -b:v {vBitrate}k {scaleFilter} " +
+                        $"-c:a libopus -b:a {aBitrate}k " +
+                        $"-shortest \"{output}\"";
+             }
+             else
+             {
+                 // MP4/MKV: H264 video + AAC audio (mix system + mic)
+                 args = $"-i \"{videoInput}\" -i \"{micInput}\" " +
+                        $"-filter_complex \"[0:a][1:a]amix=inputs=2:duration=longest[a]\" " +
+                        $"-map 0:v -map \"[a]\" " +
+                        $"-c:v libx264 -preset ultrafast -pix_fmt yuv420p " +
+                        $"-b:v {vBitrate}k -maxrate {vBitrate}k -bufsize {vBitrate * 2}k {scaleFilter} " +
+                        $"-c:a aac -b:a {aBitrate}k " +
+                        $"-movflags +faststart " +
+                        $"-shortest \"{output}\"";
+             }
+                           
+             await RunFFmpegWithProgress(ffmpeg, args, videoInput, output);
         }
     }
 }

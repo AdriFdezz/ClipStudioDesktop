@@ -1,5 +1,6 @@
 using ClipStudioDesktop.Helpers;
 using ClipStudioDesktop.Models;
+using ClipStudioDesktop.Services.Audio;
 using ClipStudioDesktop.Services.Settings;
 using ClipStudioDesktop.Services.Storage;
 using ClipStudioDesktop.Services.Recording;
@@ -26,6 +27,9 @@ namespace ClipStudioDesktop.ViewModels
         private readonly IStorageService _storageService;
         private readonly IRecordingService _recordingService;
         private readonly System.Windows.Threading.DispatcherTimer _timer;
+        private MicrophoneMonitor? _micMonitor;
+        private bool _isMicMonitorEnabled;
+        private double _micLevel;
         
         public AppSettings Settings => _settingsService.CurrentSettings;
 
@@ -49,6 +53,8 @@ namespace ClipStudioDesktop.ViewModels
         public string VideoButtonText => _recordingService.IsRecording && _recordingService.IsVideoMode ? "Detener Video" : "Grabar Video";
         public string AudioButtonText => _recordingService.IsRecording && !_recordingService.IsVideoMode ? "Detener Audio" : "Grabar Audio";
         
+        public bool IsRecording => _recordingService.IsRecording;
+
         public bool IsVideoCaptureEnabled => !_recordingService.IsRecording || (_recordingService.IsRecording && _recordingService.IsVideoMode);
         public bool IsAudioCaptureEnabled => !_recordingService.IsRecording || (_recordingService.IsRecording && !_recordingService.IsVideoMode);
 
@@ -69,6 +75,52 @@ namespace ClipStudioDesktop.ViewModels
         public ICommand OpenImagesFolderCommand { get; }
         public ICommand ReloadSettingsCommand { get; }
 
+        // Mic Monitor properties
+        public bool IsMicMonitorEnabled
+        {
+            get => _isMicMonitorEnabled;
+            set
+            {
+                if (_isMicMonitorEnabled != value)
+                {
+                    _isMicMonitorEnabled = value;
+                    OnPropertyChanged(nameof(IsMicMonitorEnabled));
+                    ToggleMicMonitor(value);
+                }
+            }
+        }
+
+        public double MicLevel
+        {
+            get => _micLevel;
+            set
+            {
+                _micLevel = value;
+                OnPropertyChanged(nameof(MicLevel));
+            }
+        }
+
+
+        private void ToggleMicMonitor(bool enable)
+        {
+            if (enable)
+            {
+                _micMonitor = new MicrophoneMonitor(_settingsService.CurrentSettings);
+                _micMonitor.LevelChanged += level =>
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() => MicLevel = level);
+                };
+                _micMonitor.Start();
+            }
+            else
+            {
+                _micMonitor?.Stop();
+                _micMonitor?.Dispose();
+                _micMonitor = null;
+                MicLevel = 0;
+            }
+        }
+
         public MainViewModel(ISettingsService settingsService, IStorageService storageService, IRecordingService recordingService)
         {
             _settingsService = settingsService;
@@ -88,7 +140,7 @@ namespace ClipStudioDesktop.ViewModels
             LoadAvailableMicrophones();
             
             _timer = new System.Windows.Threading.DispatcherTimer();
-            _timer.Interval = TimeSpan.FromSeconds(2);
+            _timer.Interval = TimeSpan.FromMilliseconds(100);
             _timer.Tick += UpdateStats; // Mantener timer para clips y espacio usado
             _timer.Start();
             
@@ -108,9 +160,12 @@ namespace ClipStudioDesktop.ViewModels
                  OnPropertyChanged(nameof(AudioButtonText));
                  OnPropertyChanged(nameof(IsVideoCaptureEnabled));
                  OnPropertyChanged(nameof(IsAudioCaptureEnabled));
+                 OnPropertyChanged(nameof(IsRecording)); // Notify change
+
                  if (!isRecording) 
                  {
                      BufferSizeText = "0 MB";
+                     RemainingSpace = "Espacio Restante: Esperando a comenzar una grabación...";
                      OnPropertyChanged(nameof(BufferSizeText));
                  }
              });
@@ -124,25 +179,51 @@ namespace ClipStudioDesktop.ViewModels
              });
         }
 
+        private string _remainingSpace = "Espacio Restante: Esperando a comenzar una grabación...";
+        public string RemainingSpace
+        {
+            get => _remainingSpace;
+            set => SetProperty(ref _remainingSpace, value);
+        }
+
+        private string _recordingDuration = "00:00:00";
+        public string RecordingDuration
+        {
+            get => _recordingDuration;
+            set => SetProperty(ref _recordingDuration, value);
+        }
+
+
+
         private void UpdateBufferStats(long estimatedBytes, long physicalBytes)
         {
             try
             {
-                if (!_recordingService.IsRecording && estimatedBytes == 0)
+                // Current RAW Size
+                string physStr = FormatBytes(physicalBytes);
+                BufferSizeText = physStr;
+                
+                // Remaining Space Logic
+                double maxGB = _settingsService.CurrentSettings.Buffer.MaxBufferSizeGB;
+                
+                if (maxGB <= 0.001) // 0 = Unlimited
                 {
-                    BufferSizeText = "0 MB";
+                    RemainingSpace = "Espacio Restante: Sin Límite";
                 }
                 else
                 {
-                    string estStr = FormatBytes(estimatedBytes);
-                    string physStr = FormatBytes(physicalBytes);
+                    long maxBytes = (long)(maxGB * 1024 * 1024 * 1024);
+                    long remaining = maxBytes - physicalBytes;
+                    if (remaining < 0) remaining = 0;
                     
-                    BufferSizeText = physStr;
+                    string remStr = FormatBytes(remaining);
+                    RemainingSpace = $"Espacio Restante: {remStr} ({maxGB:F1} GB)";
                 }
             }
             catch
             {
                 BufferSizeText = "Error";
+                RemainingSpace = "Error";
             }
             
             OnPropertyChanged(nameof(BufferSizeText));
@@ -336,6 +417,17 @@ namespace ClipStudioDesktop.ViewModels
 
         private void UpdateStats(object? sender, EventArgs e)
         {
+            // Duration Logic
+            if (_recordingService.IsRecording && _recordingService.CurrentRecordingStartTime.HasValue)
+            {
+                var duration = DateTime.Now - _recordingService.CurrentRecordingStartTime.Value;
+                RecordingDuration = duration.ToString(@"hh\:mm\:ss");
+            }
+            else
+            {
+                RecordingDuration = "00:00:00";
+            }
+
             OnPropertyChanged(nameof(StatusText));
 
             
@@ -346,22 +438,12 @@ namespace ClipStudioDesktop.ViewModels
                 var videoFiles = GetAllFiles(_storageService.GetVideoFolder());
                 var imageFiles = GetAllFiles(_storageService.GetImageFolder());
                 
-                AudioClipsText = audioFiles.Length.ToString();
-                VideoClipsText = videoFiles.Length.ToString();
-                ImagesText = imageFiles.Length.ToString();
+                AudioClipsText = GetFormattedStats(audioFiles);
+                VideoClipsText = GetFormattedStats(videoFiles);
+                ImagesText = GetFormattedStats(imageFiles);
                 
                 long totalBytes = audioFiles.Sum(f => f.Length) + videoFiles.Sum(f => f.Length) + imageFiles.Sum(f => f.Length);
-                double totalMB = totalBytes / 1024.0 / 1024.0;
-                
-                if (totalMB >= 1024)
-                {
-                    double totalGB = totalMB / 1024.0;
-                    SpaceUsedText = $"{totalGB:F2} GB";
-                }
-                else
-                {
-                    SpaceUsedText = $"{totalMB:F2} MB";
-                }
+                SpaceUsedText = FormatBytes(totalBytes);
             }
             catch 
             { 
@@ -374,6 +456,26 @@ namespace ClipStudioDesktop.ViewModels
             OnPropertyChanged(nameof(VideoClipsText));
             OnPropertyChanged(nameof(ImagesText));
             OnPropertyChanged(nameof(SpaceUsedText));
+        }
+
+        private string GetFormattedStats(FileInfo[] files)
+        {
+            int count = files.Length;
+            long bytes = files.Sum(f => f.Length);
+            double mb = bytes / 1024.0 / 1024.0;
+            
+            string sizeStr;
+            if (mb < 1024)
+            {
+                sizeStr = $"{mb:F2} MB";
+            }
+            else
+            {
+                double gb = mb / 1024.0;
+                sizeStr = $"{gb:F2} GB";
+            }
+            
+            return $"{count} ({sizeStr})";
         }
 
         private FileInfo[] GetAllFiles(string path)

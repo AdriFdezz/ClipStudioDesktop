@@ -229,5 +229,13 @@ namespace ClipStudioDesktop.Views
                     MessageBoxImage.Error);
             }
         }
+
+        private void ComboBox_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            if (sender is System.Windows.Controls.ComboBox comboBox && !comboBox.IsDropDownOpen)
+            {
+                e.Handled = true;
+            }
+        }
     }
 }

@@ -40,6 +40,8 @@ namespace ClipStudioDesktop.Models
         public string SelectedAudioDevice { get; set; } = ""; // Empty = auto-detect
         public bool EnableMicrophone { get; set; } = false; // Include microphone in recordings
         public string SelectedMicrophone { get; set; } = ""; // Empty = default microphone
+        public double MicrophoneGainDB { get; set; } = 0; // Gain boost in dB (0 = disabled)
+        public double NoiseGateDB { get; set; } = 0; // Noise gate threshold in dB (0 = disabled)
     }
 
     public class VideoSettings
@@ -93,7 +95,7 @@ namespace ClipStudioDesktop.Models
     public class BufferSettings
     {
         // Tamaño máximo del buffer en GB (para audio + video combinados)
-        public double MaxBufferSizeGB { get; set; } = 2.0; // 2GB por defecto
+        public double MaxBufferSizeGB { get; set; } = 5.0; // 5GB Default
         
         // Calculados en bytes para uso interno
         public long MaxBufferBytes => (long)(MaxBufferSizeGB * 1024 * 1024 * 1024);

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO.Pipes;
 using System.Windows.Forms;
 
 namespace ClipStudioDesktop.Services.Video
@@ -20,7 +21,11 @@ namespace ClipStudioDesktop.Services.Video
         private Process? _recordingProcess;
         private volatile bool _isRecording;
         private readonly string _bufferFolder;
-        private string? _currentSegmentPath; 
+
+        private string? _currentSegmentPath;
+        private NamedPipeServerStream? _audioPipe;
+        private Task? _pipeTask;
+ 
         
         public bool IsRunning => _isRecording;
 
@@ -48,7 +53,8 @@ namespace ClipStudioDesktop.Services.Video
 
 
 
-        public void StartRecording(string outputFilePath)
+
+        public void StartRecording(string outputFilePath, bool recordAudio = false, int sampleRate = 48000, int channels = 2, string pcmFormat = "f32le")
         {
             if (_isRecording) return;
 
@@ -79,13 +85,46 @@ namespace ClipStudioDesktop.Services.Video
             int fps = _settings.Video.Framerate > 0 ? _settings.Video.Framerate : 30;
             int br = _settings.Video.Bitrate > 0 ? _settings.Video.Bitrate : 8000;
 
-            string arguments = $"-f gdigrab -framerate {fps} " +
-                             $"-offset_x {x} -offset_y {y} " +
-                             $"-video_size {w}x{h} " +
-                             $"-i desktop " +
-                             $"-c:v libx264 -preset ultrafast -b:v {br}k -pix_fmt yuv420p " +
+            string arguments;
+            
+            if (recordAudio)
+            {
+                // Setup Named Pipe for Audio
+                string pipeName = $"clipstudio_audio_{Process.GetCurrentProcess().Id}";
+                // Increased buffer size to 64KB to avoid blocking
+                _audioPipe = new NamedPipeServerStream(pipeName, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 65536, 65536);
+                
+                // Wait for connection asynchronously
+                _pipeTask = Task.Run(() => 
+                {
+                    try { _audioPipe.WaitForConnection(); } catch { }
+                });
+
+                // FFmpeg arguments with Audio Pipe Input
+                // Optimization V7 (Manual Delay): 
+                // - thread_queue_size 1024: Restored for safety
+                // - filter_complex REMOVED: Relying on RecordingService's 4s delay to skip bad start
+                // - zerolatency and vsync 1: Kept for smoothness
+                 arguments = $"-thread_queue_size 1024 -f gdigrab -framerate {fps} -offset_x {x} -offset_y {y} -video_size {w}x{h} -i desktop " +
+                             $"-thread_queue_size 1024 -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \\\\.\\pipe\\{pipeName} " +
+                             $"-map 0:v -map 1:a " +
+                             $"-c:v libx264 -preset ultrafast -tune zerolatency -b:v {br}k -pix_fmt yuv420p -vsync 1 " +
+                             $"-c:a aac -b:a 192k " +
+                             $"-fflags nobuffer " +
                              $"-s {outW}x{outH} " +
                              $"\"{outputFilePath}\"";
+            }
+            else
+            {
+                // Video Only
+                arguments = $"-f gdigrab -framerate {fps} " +
+                                 $"-offset_x {x} -offset_y {y} " +
+                                 $"-video_size {w}x{h} " +
+                                 $"-i desktop " +
+                                 $"-c:v libx264 -preset ultrafast -b:v {br}k -pix_fmt yuv420p " +
+                                 $"-s {outW}x{outH} " +
+                                 $"\"{outputFilePath}\"";
+            }
 
             Log($"Starting DIRECT recording to: {outputFilePath}");
             Log($"CMD: {ffmpegPath} {arguments}");
@@ -144,6 +183,22 @@ namespace ClipStudioDesktop.Services.Video
                 catch { }
                 _recordingProcess?.Dispose();
                 _recordingProcess = null;
+            }
+
+            
+            _audioPipe?.Dispose();
+            _audioPipe = null;
+        }
+
+        public void WriteAudio(byte[] buffer, int count)
+        {
+            if (_audioPipe != null && _audioPipe.IsConnected)
+            {
+                try
+                {
+                    _audioPipe.Write(buffer, 0, count);
+                }
+                catch { }
             }
         }
 

@@ -14,6 +14,7 @@ namespace ClipStudioDesktop.Services.Audio
     {
         private readonly AppSettings _settings;
         private WasapiLoopbackCapture? _capture;
+        public WaveFormat? WaveFormat => _waveFormat;
         private WaveFormat? _waveFormat;
         private bool _isRecording;
         
@@ -27,6 +28,8 @@ namespace ClipStudioDesktop.Services.Audio
 
 
         private long _currentTotalBytes;
+        
+        public event Action<byte[], int>? AudioDataAvailable;
 
 
         public AudioRecorder(AppSettings settings)
@@ -36,15 +39,17 @@ namespace ClipStudioDesktop.Services.Audio
             _bufferFolder = Path.Combine(_bufferRootPath, "audio");
         }
 
-        public bool Start(string outputFilePath)
+        public bool Start(string? outputFilePath)
         {
             if (_isRecording) return true;
+
 
             try 
             {
                 Directory.CreateDirectory(_bufferFolder);
                 _currentTotalBytes = 0;
                 _currentChunkPath = outputFilePath;
+
 
                 try 
                 {
@@ -61,7 +66,11 @@ namespace ClipStudioDesktop.Services.Audio
                 _waveFormat = _capture.WaveFormat;
                 
                 // Direct stream to the output file
-                _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                if (!string.IsNullOrEmpty(_currentChunkPath))
+                {
+                    _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                }
+
 
                 _capture.DataAvailable += OnDataAvailable;
                 _capture.RecordingStopped += OnRecordingStopped;
@@ -96,14 +105,13 @@ namespace ClipStudioDesktop.Services.Audio
         {
             if (e.BytesRecorded == 0) return;
 
-            lock (_lock)
-            {
                 if (_currentChunkStream != null)
                 {
                     _currentChunkStream.Write(e.Buffer, 0, e.BytesRecorded);
                     _currentTotalBytes += e.BytesRecorded;
                 }
-            }
+                
+                AudioDataAvailable?.Invoke(e.Buffer, e.BytesRecorded);
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:ClipStudioDesktop.ViewModels"
         xmlns:local="clr-namespace:ClipStudioDesktop.Views"
+        xmlns:converters="clr-namespace:ClipStudioDesktop.Converters"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel, IsDesignTimeCreatable=False}"
         Title="Clip Studio Desktop" Height="650" Width="900"
@@ -13,6 +14,14 @@
         Icon="pack://application:,,,/assets/Clip_Studio_Desktop_ico.ico"
         Background="{StaticResource BackgroundBrush}"
         Deactivated="Window_Deactivated">
+    
+    <Window.Resources>
+        <converters:NegateValueConverter x:Key="NegateConverter"/>
+        <converters:NegativeFormatConverter x:Key="NegativeFormatConverter"/>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:LevelToWidthConverter x:Key="LevelToWidthConverter"/>
+        <converters:LevelToColorConverter x:Key="LevelToColorConverter"/>
+    </Window.Resources>
     
     <Grid>
         <Grid.RowDefinitions>
@@ -96,38 +105,26 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Formato" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1" SelectedValue="{Binding Settings.Audio.Format}" SelectedValuePath="Content" Margin="0,5"
-                                          ToolTip="Formato de archivo de audio (mp3, flac).">
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
+                                          ToolTip="Formato de archivo de audio.">
                                     <ComboBoxItem Content="mp3"/>
                                     <ComboBoxItem Content="flac"/>
+                                    <ComboBoxItem Content="wav"/>
+                                    <ComboBoxItem Content="ogg"/>
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="1" Text="Bitrate (kbps)" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Row="1" Grid.Column="1" SelectedValue="{Binding Settings.Audio.Bitrate}" SelectedValuePath="Tag" Margin="0,5"
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
                                           ToolTip="Calidad de audio en kbps. 192 es calidad estándar alta.">
                                     <ComboBoxItem Content="128 kbps (Estándar)" Tag="128"/>
                                     <ComboBoxItem Content="192 kbps (Alta)" Tag="192"/>
                                     <ComboBoxItem Content="320 kbps (Máxima)" Tag="320"/>
                                 </ComboBox>
-
-                                <TextBlock Grid.Row="2" Text="Micrófono" VerticalAlignment="Center" Margin="0,10"/>
-                                <ComboBox Grid.Row="2" Grid.Column="1" 
-                                          ItemsSource="{Binding AvailableMicrophones}" 
-                                          SelectedValue="{Binding Settings.Audio.SelectedMicrophone}" 
-                                          DisplayMemberPath="DisplayName"
-                                          SelectedValuePath="DeviceName"
-                                          Margin="0,5"
-                                          ToolTip="Selecciona el micrófono a usar para las grabaciones"/>
-
-                                <CheckBox Grid.Row="3" Grid.ColumnSpan="2" Content="Incluir micrófono en grabaciones" 
-                                          IsChecked="{Binding Settings.Audio.EnableMicrophone}" 
-                                          Margin="0,10"
-                                          ToolTip="Mezcla el audio de tu micrófono con el audio del sistema en las grabaciones"/>
                             </Grid>
                         </GroupBox>
 
@@ -145,13 +142,16 @@
 
                                 <TextBlock Text="Formato de Video" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Video.Format}" SelectedValuePath="Content" Margin="0,5"
-                                          ToolTip="Formato de archivo de video (mp4, mkv).">
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
+                                          ToolTip="Formato de archivo de video.">
                                     <ComboBoxItem Content="mp4"/>
                                     <ComboBoxItem Content="mkv"/>
+                                    <ComboBoxItem Content="webm"/>
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="1" Text="FPS" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Row="1" Grid.Column="1" SelectedValue="{Binding Settings.Video.Framerate}" SelectedValuePath="Tag" Margin="0,5"
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
                                           ToolTip="Cuadros por segundo. 60 para fluidez, 30 para menor tamaño.">
                                     <ComboBoxItem Content="30" Tag="30"/>
                                     <ComboBoxItem Content="60" Tag="60"/>
@@ -159,11 +159,92 @@
 
                                 <TextBlock Grid.Row="2" Text="Bitrate (kbps)" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Row="2" Grid.Column="1" SelectedValue="{Binding Settings.Video.Bitrate}" SelectedValuePath="Tag" Margin="0,5"
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
                                           ToolTip="Calidad de video en kbps. 8000 es buena calidad para 1080p.">
                                     <ComboBoxItem Content="4000 kbps (Baja - 720p)" Tag="4000"/>
                                     <ComboBoxItem Content="8000 kbps (Media - 1080p)" Tag="8000"/>
                                     <ComboBoxItem Content="15000 kbps (Alta - 1080p60)" Tag="15000"/>
                                 </ComboBox>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="Configuración de Micrófono">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <CheckBox Grid.Row="0" Grid.ColumnSpan="3" Content="Incluir micrófono en grabaciones" 
+                                          IsChecked="{Binding Settings.Audio.EnableMicrophone}" 
+                                          Margin="0,10"
+                                          ToolTip="Mezcla el audio de tu micrófono con el audio del sistema en las grabaciones"/>
+
+                                <TextBlock Grid.Row="1" Text="Elige tu Micrófono" VerticalAlignment="Center" Margin="0,10"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                                          ItemsSource="{Binding AvailableMicrophones}" 
+                                          SelectedValue="{Binding Settings.Audio.SelectedMicrophone}" 
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="DeviceName"
+                                          Margin="0,5"
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
+                                          ToolTip="Selecciona el micrófono a usar para las grabaciones"/>
+
+                                <!-- Probar Micrófono Toggle -->
+                                <TextBlock Grid.Row="2" Text="Probar Micrófono" VerticalAlignment="Center" Margin="0,10"
+                                           ToolTip="Activa para escucharte y ver el nivel de audio"/>
+                                <CheckBox Grid.Row="2" Grid.Column="1" Content="Escucharme"
+                                          IsChecked="{Binding IsMicMonitorEnabled}"
+                                          VerticalAlignment="Center" Margin="0,10"
+                                          ToolTip="Activa para escuchar tu micrófono y ajustar los niveles"/>
+
+                                <!-- VU Meter - Only visible when monitoring -->
+                                <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" 
+                                      Visibility="{Binding IsMicMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                      Height="14" Margin="100,10,0,10" VerticalAlignment="Center">
+                                    <!-- Background bar -->
+                                    <Border Background="#333333" CornerRadius="3"/>
+                                    <!-- Level bar with dynamic color based on level -->
+                                    <Border CornerRadius="3" HorizontalAlignment="Left"
+                                            Width="{Binding MicLevel, Converter={StaticResource LevelToWidthConverter}}"
+                                            Background="{Binding MicLevel, Converter={StaticResource LevelToColorConverter}}"/>
+                                </Grid>
+
+                                <TextBlock Grid.Row="3" Text="Ganancia (dB)" VerticalAlignment="Center" Margin="0,10"
+                                           ToolTip="Amplifica el volumen del micrófono. 0 = sin cambios. Valores altos (ej: +12 dB) = mucho más fuerte."/>
+                                <Slider Grid.Row="3" Grid.Column="1" 
+                                        Height="20"
+                                        Minimum="0" Maximum="30" 
+                                        Value="{Binding Settings.Audio.MicrophoneGainDB}" 
+                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Margin="0,10"
+                                        ToolTip="Valores bajos (+6 dB) = ligero aumento. Valores altos (+18 dB) = mucho más fuerte."/>
+                                <TextBlock Grid.Row="3" Grid.Column="2" 
+                                           Text="{Binding Settings.Audio.MicrophoneGainDB, StringFormat=+{0:F0} dB}" 
+                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="5,10"/>
+
+                                <TextBlock Grid.Row="4" Text="Puerta de Ruido" VerticalAlignment="Center" Margin="0,10"
+                                           ToolTip="Elimina ruido de fondo. 0 = desactivado. Valores altos (ej: -25 dB) = más agresivo."/>
+                                <Slider Grid.Row="4" Grid.Column="1" 
+                                        Height="20"
+                                        Minimum="0" Maximum="30" 
+                                        Value="{Binding Settings.Audio.NoiseGateDB, Converter={StaticResource NegateConverter}}" 
+                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Margin="0,10"
+                                        PreviewMouseWheel="ComboBox_PreviewMouseWheel"
+                                        ToolTip="Valores bajos (-10 dB) = suave. Valores altos (-25 dB) = agresivo."/>
+                                <TextBlock Grid.Row="4" Grid.Column="2" 
+                                           Text="{Binding Settings.Audio.NoiseGateDB, Converter={StaticResource NegativeFormatConverter}}" 
+                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="5,10"/>
                             </Grid>
                         </GroupBox>
 
@@ -175,6 +256,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Formato de Imagen" VerticalAlignment="Center" Margin="0,10"/>
                                 <ComboBox Grid.Column="1" SelectedValue="{Binding Settings.Screenshot.Format}" SelectedValuePath="Content" Margin="0,5"
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
                                           ToolTip="Formato de archivo para las capturas de pantalla (png, jpg).">
                                     <ComboBoxItem Content="png"/>
                                     <ComboBoxItem Content="jpg"/>
@@ -311,7 +393,24 @@
         </TabItem>
 
             <!-- Status Tab -->
-            <TabItem Header="ESTADO">
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="ESTADO" VerticalAlignment="Center"/>
+                        <Ellipse Width="10" Height="10" Fill="Red" Margin="8,0,0,0" VerticalAlignment="Center"
+                                 Visibility="{Binding DataContext.IsRecording, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Ellipse.Triggers>
+                                <EventTrigger RoutedEvent="Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1.0" To="0.3" Duration="0:0:1.0"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Ellipse.Triggers>
+                        </Ellipse>
+                    </StackPanel>
+                </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,10,15,0">
                     <GroupBox Header="Estado del Sistema">
@@ -336,8 +435,24 @@
                                         <ColumnDefinition Width="180"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Tiempo Transcurrido" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding RecordingDuration}" Foreground="{StaticResource TextBrush}" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </Grid>
+                                
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock Text="Tamaño Actual RAW" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="{Binding BufferSizeText}" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Grid Margin="0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.ColumnSpan="2" Text="{Binding RemainingSpace}" Foreground="#888888" FontSize="11" Margin="0,-2,0,5"  VerticalAlignment="Top"/>
                                 </Grid>
                             </StackPanel>
                     </GroupBox>

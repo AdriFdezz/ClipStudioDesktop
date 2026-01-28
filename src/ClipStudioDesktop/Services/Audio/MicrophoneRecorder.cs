@@ -122,13 +122,140 @@ namespace ClipStudioDesktop.Services.Audio
         {
             if (e.BytesRecorded == 0) return;
 
+            byte[] processedBuffer = e.Buffer;
+            int bytesRecorded = e.BytesRecorded;
+
+            // Apply gain and noise gate if configured
+            double gainDB = _settings.Audio.MicrophoneGainDB;
+            double noiseGateDB = _settings.Audio.NoiseGateDB;
+
+            if (gainDB != 0 || noiseGateDB != 0)
+            {
+                processedBuffer = ProcessAudioBuffer(e.Buffer, e.BytesRecorded, gainDB, noiseGateDB);
+            }
+
             lock (_lock)
             {
                 if (_currentChunkStream != null)
                 {
-                    _currentChunkStream.Write(e.Buffer, 0, e.BytesRecorded);
+                    _currentChunkStream.Write(processedBuffer, 0, bytesRecorded);
                 }
             }
+        }
+
+        private byte[] ProcessAudioBuffer(byte[] buffer, int bytesRecorded, double gainDB, double noiseGateDB)
+        {
+            // Clone buffer to avoid modifying original
+            byte[] result = new byte[bytesRecorded];
+            Array.Copy(buffer, result, bytesRecorded);
+
+            if (_waveFormat == null) return result;
+
+            // Calculate RMS (root mean square) level of the RAW buffer (before gain)
+            // This ensures we are gating based on the actual input level, so increasing gain
+            // doesn't "break" the noise gate by amplifying noise above the threshold.
+            double rawRmsLevel = CalculateRmsLevel(result, bytesRecorded);
+
+            // Noise gate threshold calculation (INVERTED for intuitive behavior):
+            // Slider low = little filtering, slider high = much filtering
+            double noiseGateThreshold = 0.0;
+            if (noiseGateDB != 0)
+            {
+                double effectiveDB = -60.0 - noiseGateDB;
+                noiseGateThreshold = Math.Pow(10, effectiveDB / 20.0);
+            }
+            
+            // If RAW RMS level is below threshold, silence the entire buffer (gate is closed)
+            bool gateOpen = (noiseGateThreshold == 0) || (rawRmsLevel >= noiseGateThreshold);
+
+            // Calculate gain multiplier: 10^(dB/20)
+            double gainMultiplier = gainDB != 0 ? Math.Pow(10, gainDB / 20.0) : 1.0;
+
+            if (_waveFormat.Encoding == WaveFormatEncoding.IeeeFloat && _waveFormat.BitsPerSample == 32)
+            {
+                for (int i = 0; i < bytesRecorded; i += 4)
+                {
+                    float sample;
+                    
+                    if (!gateOpen)
+                    {
+                        // Gate closed: silence
+                        sample = 0f;
+                    }
+                    else
+                    {
+                        // Gate open: pass audio through with gain applied
+                        sample = BitConverter.ToSingle(result, i);
+                        if (gainMultiplier != 1.0)
+                        {
+                            sample = (float)(sample * gainMultiplier);
+                        }
+                        sample = Math.Max(-1f, Math.Min(1f, sample));
+                    }
+                    
+                    byte[] bytes = BitConverter.GetBytes(sample);
+                    Array.Copy(bytes, 0, result, i, 4);
+                }
+            }
+            else if (_waveFormat.Encoding == WaveFormatEncoding.Pcm && _waveFormat.BitsPerSample == 16)
+            {
+                for (int i = 0; i < bytesRecorded; i += 2)
+                {
+                    short sample;
+                    
+                    if (!gateOpen)
+                    {
+                        // Gate closed: silence
+                        sample = 0;
+                    }
+                    else
+                    {
+                        // Gate open: pass audio through with gain applied
+                        sample = BitConverter.ToInt16(result, i);
+                        if (gainMultiplier != 1.0)
+                        {
+                            double amplified = sample * gainMultiplier;
+                            sample = (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, amplified));
+                        }
+                    }
+                    
+                    byte[] bytes = BitConverter.GetBytes(sample);
+                    Array.Copy(bytes, 0, result, i, 2);
+                }
+            }
+
+            return result;
+        }
+
+        private double CalculateRmsLevel(byte[] buffer, int bytesRecorded)
+        {
+            if (_waveFormat == null) return 0;
+
+            double sumSquares = 0;
+            int sampleCount = 0;
+
+            if (_waveFormat.Encoding == WaveFormatEncoding.IeeeFloat && _waveFormat.BitsPerSample == 32)
+            {
+                for (int i = 0; i < bytesRecorded; i += 4)
+                {
+                    float sample = BitConverter.ToSingle(buffer, i);
+                    sumSquares += sample * sample;
+                    sampleCount++;
+                }
+            }
+            else if (_waveFormat.Encoding == WaveFormatEncoding.Pcm && _waveFormat.BitsPerSample == 16)
+            {
+                for (int i = 0; i < bytesRecorded; i += 2)
+                {
+                    short sample = BitConverter.ToInt16(buffer, i);
+                    double normalized = sample / 32768.0;
+                    sumSquares += normalized * normalized;
+                    sampleCount++;
+                }
+            }
+
+            if (sampleCount == 0) return 0;
+            return Math.Sqrt(sumSquares / sampleCount);
         }
         
         // This is necessary because the recorded file is RAW. We need valid WAV for FFmpeg auto-detection to work best in MergeFiles.

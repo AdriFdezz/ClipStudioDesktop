@@ -11,6 +11,7 @@ namespace ClipStudioDesktop.Services.Recording
         event EventHandler<string> ClipSaved;
         event EventHandler<(long Estimated, long Physical)> BufferSizeChanged;
         Task StartRecordingAsync(bool videoEnabled = true);
+        DateTime? CurrentRecordingStartTime { get; }
         Task StopRecordingAsync();
         Task ToggleRecordingAsync(bool videoEnabled = true);
         Task SaveClipAsync(int durationSeconds, bool isVideo);
