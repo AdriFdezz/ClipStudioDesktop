@@ -12,8 +12,9 @@ using System.Windows.Forms;
 namespace ClipStudioDesktop.Services.Video
 {
     /// <summary>
-    /// Graba video+audio simultáneamente usando FFmpeg con gdigrab y audio loopback
-    /// Esto elimina problemas de sincronización al grabar ambos streams juntos
+    /// Grabador de video y audio utilizando FFmpeg directamente (vía CLI).
+    /// Utiliza `gdigrab` para captura de pantalla y `NamedPipe` para recibir audio PCM en tiempo real.
+    /// <para>Esta implementación busca evitar problemas de desincronización procesando ambos flujos en un solo comando FFmpeg.</para>
     /// </summary>
     public class FFmpegRecorder : IDisposable
     {
@@ -22,6 +23,7 @@ namespace ClipStudioDesktop.Services.Video
         private volatile bool _isRecording;
         private readonly string _bufferFolder;
 
+        // Variables para manejo de segmentos y tubería de audio
         private string? _currentSegmentPath;
         private NamedPipeServerStream? _audioPipe;
         private Task? _pipeTask;
@@ -51,9 +53,14 @@ namespace ClipStudioDesktop.Services.Video
             Directory.CreateDirectory(_bufferFolder);
         }
 
-
-
-
+        /// <summary>
+        /// Inicia la grabación directa usando `ffmpeg.exe`.
+        /// </summary>
+        /// <param name="outputFilePath">Ruta del archivo de salida.</param>
+        /// <param name="recordAudio">Si es true, configura un Named Pipe para recibir audio raw.</param>
+        /// <param name="sampleRate">Frecuencia de muestreo del audio.</param>
+        /// <param name="channels">Canales de audio.</param>
+        /// <param name="pcmFormat">Formato PCM (ej. f32le) que se enviará por el pipe.</param>
         public void StartRecording(string outputFilePath, bool recordAudio = false, int sampleRate = 48000, int channels = 2, string pcmFormat = "f32le")
         {
             if (_isRecording) return;
@@ -89,22 +96,21 @@ namespace ClipStudioDesktop.Services.Video
             
             if (recordAudio)
             {
-                // Setup Named Pipe for Audio
+                // Configurar Named Pipe para audio
                 string pipeName = $"clipstudio_audio_{Process.GetCurrentProcess().Id}";
-                // Increased buffer size to 64KB to avoid blocking
                 _audioPipe = new NamedPipeServerStream(pipeName, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 65536, 65536);
                 
-                // Wait for connection asynchronously
+                // Esperar conexión de forma asíncrona
                 _pipeTask = Task.Run(() => 
                 {
                     try { _audioPipe.WaitForConnection(); } catch { }
                 });
 
-                // FFmpeg arguments with Audio Pipe Input
-                // Optimization V7 (Manual Delay): 
-                // - thread_queue_size 1024: Restored for safety
-                // - filter_complex REMOVED: Relying on RecordingService's 4s delay to skip bad start
-                // - zerolatency and vsync 1: Kept for smoothness
+                // Argumentos FFmpeg con entrada de Audio Pipe
+                // Optimización V7 (Manual Delay): 
+                // - thread_queue_size 1024: por seguridad
+                // - filter_complex ELIMINADO: Se confía en el delay manual de RecordingService
+                // - zerolatency y vsync 1: Mantenidos para fluidez
                  arguments = $"-thread_queue_size 1024 -f gdigrab -framerate {fps} -offset_x {x} -offset_y {y} -video_size {w}x{h} -i desktop " +
                              $"-thread_queue_size 1024 -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \\\\.\\pipe\\{pipeName} " +
                              $"-map 0:v -map 1:a " +
@@ -116,7 +122,7 @@ namespace ClipStudioDesktop.Services.Video
             }
             else
             {
-                // Video Only
+                // Solo Video
                 arguments = $"-f gdigrab -framerate {fps} " +
                                  $"-offset_x {x} -offset_y {y} " +
                                  $"-video_size {w}x{h} " +
@@ -161,6 +167,10 @@ namespace ClipStudioDesktop.Services.Video
             _recordingProcess.BeginErrorReadLine();
         }
 
+        /// <summary>
+        /// Detiene la grabación enviando el comando 'q' a la entrada estándar de FFmpeg.
+        /// Espera a que el proceso termine ordenadamente.
+        /// </summary>
         public async Task Stop()
         {
             _isRecording = false;
@@ -171,7 +181,6 @@ namespace ClipStudioDesktop.Services.Video
                 {
                     _recordingProcess.StandardInput.WriteLine("q");
                     
-                    // Wait nicely
                     var cts = new CancellationTokenSource(2000);
                     try { await _recordingProcess.WaitForExitAsync(cts.Token); } catch { }
                     
@@ -190,6 +199,9 @@ namespace ClipStudioDesktop.Services.Video
             _audioPipe = null;
         }
 
+        /// <summary>
+        /// Escribe datos de audio (PCM) en el Named Pipe para que FFmpeg los integre en el video.
+        /// </summary>
         public void WriteAudio(byte[] buffer, int count)
         {
             if (_audioPipe != null && _audioPipe.IsConnected)

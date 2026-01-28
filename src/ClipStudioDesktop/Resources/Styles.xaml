@@ -1,40 +1,49 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Colors -->
-    <Color x:Key="BackgroundColor">#1E1E1E</Color>
-    <Color x:Key="SurfaceColor">#252526</Color>
-    <Color x:Key="SurfaceLightColor">#2D2D30</Color>
-    <Color x:Key="BorderColor">#3E3E42</Color>
-    <Color x:Key="PrimaryColor">#007ACC</Color>
-    <Color x:Key="PrimaryHoverColor">#1C97EA</Color>
-    <Color x:Key="TextColor">#F1F1F1</Color>
-    <Color x:Key="TextSecondaryColor">#CCCCCC</Color>
-    <Color x:Key="ErrorColor">#F44336</Color>
+    <!-- ==================================================================================================
+         DEFINICIÓN DE COLORES Y PALETA PRINCIPAL
+         Tema: Oscuro (Dark Mode) con acentos Azules (#007ACC)
+         ================================================================================================== -->
+    <Color x:Key="BackgroundColor">#1E1E1E</Color>      <!-- Fondo principal de ventanas -->
+    <Color x:Key="SurfaceColor">#252526</Color>         <!-- Fondo de controles (Inputs, Lists) -->
+    <Color x:Key="SurfaceLightColor">#2D2D30</Color>    <!-- Fondo de paneles y tarjetas (GroupBox) -->
+    <Color x:Key="BorderColor">#3E3E42</Color>          <!-- Bordes generales -->
+    <Color x:Key="PrimaryColor">#007ACC</Color>         <!-- Color de acento principal (Botones, Selección) -->
+    <Color x:Key="PrimaryHoverColor">#1C97EA</Color>    <!-- Color de acento al pasar el ratón -->
+    <Color x:Key="TextColor">#F1F1F1</Color>            <!-- Texto principal (Casi blanco) -->
+    <Color x:Key="TextSecondaryColor">#CCCCCC</Color>   <!-- Texto secundario/deshabilitado (Gris claro) -->
+    <Color x:Key="ErrorColor">#F44336</Color>           <!-- Color para errores (Rojo Material Design) -->
 
-    <!-- Brushes -->
+    <!-- ==================================================================================================
+         PINCELES (BRUSHES)
+         Recursos estáticos utilizados directamente por los controles UI
+         ================================================================================================== -->
     <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}"/>
     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
     <SolidColorBrush x:Key="SurfaceLightBrush" Color="{StaticResource SurfaceLightColor}"/>
     <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
-    
-    <!-- FocusVisual Style Nullifier (Universal) -->
-    <Style TargetType="ScrollViewer">
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-    </Style>
-
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}"/>
     <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}"/>
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
 
-    <!-- Text Styles -->
+    <!-- RESET GLOBAL: Elimina el borde punteado de foco en ScrollViewers para una UI más limpia -->
+    <Style TargetType="ScrollViewer">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    </Style>
+
+    <!-- ==================================================================================================
+         ESTILOS DE CONTROLES
+         ================================================================================================== -->
+
+    <!-- TEXTBLOCK: Estilo base para textos -->
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
     </Style>
 
-    <!-- Button Style -->
+    <!-- BUTTON: Estilo plano moderno con esquinas redondeadas -->
     <Style TargetType="Button">
         <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
         <Setter Property="Foreground" Value="White"/>
@@ -70,7 +79,7 @@
         </Setter>
     </Style>
 
-    <!-- TextBox Style -->
+    <!-- TEXTBOX: Estilo oscuro plano -->
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -97,7 +106,7 @@
         </Setter>
     </Style>
 
-    <!-- CheckBox Style -->
+    <!-- CHECKBOX: Estilo básico ajustado al tema oscuro -->
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="FontSize" Value="14"/>
@@ -105,7 +114,7 @@
         <Setter Property="Cursor" Value="Hand"/>
     </Style>
 
-    <!-- ComboBox Style -->
+    <!-- COMBOBOX: Personalización completa para eliminar estilo nativo de Windows -->
     <ControlTemplate x:Key="ComboBoxToggleButton" TargetType="ToggleButton">
         <Grid>
             <Grid.ColumnDefinitions>
@@ -217,7 +226,6 @@
         </Setter>
     </Style>
 
-    <!-- ComboBoxItem Style -->
     <Style TargetType="ComboBoxItem">
         <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -248,7 +256,7 @@
         </Setter>
     </Style>
 
-    <!-- GroupBox Style (Premium Card Style) -->
+    <!-- GROUPBOX: Estilo "Card" premium personalizado para agrupar controles -->
     <Style TargetType="GroupBox">
         <Setter Property="Background" Value="{StaticResource SurfaceLightBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
@@ -262,14 +270,14 @@
             <Setter.Value>
                 <ControlTemplate TargetType="GroupBox">
                     <Grid Margin="0,2,0,5">
-                        <!-- Shadowless Depth Effect (using borders to prevent blurring) -->
+                        <!-- Borde contenedor con esquinas redondeadas -->
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" 
                                 BorderThickness="{TemplateBinding BorderThickness}" 
                                 CornerRadius="8"
                                 SnapsToDevicePixels="True">
                             <StackPanel>
-                                <!-- Header Area -->
+                                <!-- Área de Encabezado -->
                                 <Grid Margin="15,10,15,0">
                                     <ContentPresenter ContentSource="Header">
                                         <ContentPresenter.ContentTemplate>
@@ -283,13 +291,13 @@
                                     </ContentPresenter>
                                 </Grid>
                                 
-                                <!-- Sleek Separator -->
+                                <!-- Separador visual sutil -->
                                 <Border Height="1" 
                                         Background="{StaticResource BorderBrush}" 
                                         Opacity="1.0" 
                                         Margin="15,8,15,5"/>
 
-                                <!-- Content area -->
+                                <!-- Área de contenido -->
                                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
                             </StackPanel>
                         </Border>
@@ -304,7 +312,7 @@
         </Setter>
     </Style>
 
-    <!-- ToolTip Style -->
+    <!-- TOOLTIP: Estilo plano para tooltips -->
     <Style TargetType="ToolTip">
         <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -325,7 +333,7 @@
         </Setter>
     </Style>
 
-    <!-- TabControl Style -->
+    <!-- TABCONTROL: Estilo minimalista -->
     <Style TargetType="TabControl">
         <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -338,6 +346,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
                     <Grid>
+                        <!-- Indicador inferior de pestaña activa -->
                         <Border Name="Border" BorderThickness="0,0,0,2" BorderBrush="Transparent" Background="Transparent" Padding="15,10">
                             <ContentPresenter x:Name="ContentSite"
                                             VerticalAlignment="Center"
@@ -368,14 +377,14 @@
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
     </Style>
 
-    <!-- Window Style -->
+    <!-- MAIN WINDOW -->
     <Style TargetType="Window">
         <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
     </Style>
 
-    <!-- DataGrid Style -->
+    <!-- DATAGRID: Tabla de registros -->
     <Style TargetType="DataGrid">
         <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -400,7 +409,7 @@
         </Setter>
     </Style>
 
-    <!-- ContextMenu Style -->
+    <!-- MENUS CONTEXTUALES (Right Click) -->
     <Style TargetType="ContextMenu">
         <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -421,7 +430,6 @@
         </Setter>
     </Style>
 
-    <!-- MenuItem Style -->
     <Style TargetType="MenuItem">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -468,7 +476,6 @@
         </Setter>
     </Style>
 
-    <!-- Separator Style -->
     <Style TargetType="Separator">
         <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
         <Setter Property="Margin" Value="0,5"/>

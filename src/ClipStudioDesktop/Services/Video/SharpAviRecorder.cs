@@ -14,6 +14,10 @@ using SharpAvi.Output;
 
 namespace ClipStudioDesktop.Services.Video
 {
+    /// <summary>
+    /// Grabador de video que utiliza SharpAvi para generar archivos AVI (Motion JPEG) y captura de audio WASAPI.
+    /// <para>Esta clase implementa un bucle de captura de video dedicado en un hilo separado para mantener un frame rate constante.</para>
+    /// </summary>
     public class SharpAviRecorder : IDisposable
     {
         private AviWriter? _writer;
@@ -30,10 +34,17 @@ namespace ClipStudioDesktop.Services.Video
         private string? _outputPath;
         private bool _isRecording;
 
-        // Configuration
-        private int _frameRate = 30; // Default
-        private int _quality = 85; // Default JPEG Quality
+        // Configuración
+        private int _frameRate = 30; // Por defecto
+        private int _quality = 85; // Calidad JPEG por defecto
         
+        /// <summary>
+        /// Inicia la grabación de video AVI.
+        /// </summary>
+        /// <param name="outputPath">Ruta completa del archivo .avi de salida.</param>
+        /// <param name="fps">Frames por segundo deseados.</param>
+        /// <param name="quality">Calidad de compresión JPEG (10-100).</param>
+        /// <param name="recordAudio">Si es true, inicializa la captura de audio del sistema (WASAPI).</param>
         public void StartRecording(string outputPath, int fps, int quality = 85, bool recordAudio = true)
         {
             if (_isRecording) return;
@@ -42,7 +53,7 @@ namespace ClipStudioDesktop.Services.Video
             _frameRate = fps;
             _quality = quality;
             
-            // Clamp quality
+            // Validar límites de calidad
             if (_quality < 10) _quality = 10;
             if (_quality > 100) _quality = 100;
             
@@ -51,28 +62,28 @@ namespace ClipStudioDesktop.Services.Video
             _width = screen.Bounds.Width;
             _height = screen.Bounds.Height;
             
-            // Adjust to even numbers (SharpAvi/Codecs often prefer even dimensions)
+            // Ajustar resoluciones impares (SharpAvi/Codecs suelen preferir dimensiones pares)
             if (_width % 2 != 0) _width--;
             if (_height % 2 != 0) _height--;
 
             try
             {
-                // Create AVI Writer
+                // Crear escritor AVI
                 _writer = new AviWriter(_outputPath)
                 {
                     FramesPerSecond = _frameRate,
                     EmitIndex1 = true
                 };
 
-                // Add Video Stream (Motion JPEG is fast and good quality for accumulation)
-                // Using 100 quality for "RAW-like" capture (we convert later)
+                // Agregar Stream de Video (Motion JPEG es rápido y de buena calidad para grabación temporal)
+                // Se usa calidad alta para minimizar artefactos antes de la conversión final a MP4
                 _videoStream = _writer.AddVideoStream();
                 _videoStream.Width = _width;
                 _videoStream.Height = _height;
                 _videoStream.Codec = new SharpAvi.FourCC("MJPG"); 
                 _videoStream.BitsPerPixel = BitsPerPixel.Bpp24;
 
-                // Configure Audio if requested
+                // Configurar Audio si se solicita
                 if (recordAudio)
                 {
                     InitializeAudioCapture();
@@ -81,14 +92,14 @@ namespace ClipStudioDesktop.Services.Video
                 _isRecording = true;
                 _stopEvent.Reset();
 
-                // Start Audio Capture
+                // Iniciar Audio Capture
                 _audioCapture?.StartRecording();
 
-                // Start Video Capture Thread
+                // Iniciar Hilo de Captura de Video
                 _videoThread = new Thread(VideoLoop)
                 {
                     IsBackground = true,
-                    Priority = ThreadPriority.Highest, // Critical for timing
+                    Priority = ThreadPriority.Highest, // Crítico para el timing
                     Name = "SharpAviVideoCaptureThread"
                 };
                 _videoThread.Start();
@@ -99,7 +110,7 @@ namespace ClipStudioDesktop.Services.Video
             {
                 Debug.WriteLine($"[SharpAviRecorder] Error starting: {ex.Message}");
                 Cleanup();
-                throw; // Propagate to Service
+                throw; // Propagar error al servicio
             }
         }
         public void Stop()
@@ -109,67 +120,66 @@ namespace ClipStudioDesktop.Services.Video
             Debug.WriteLine("[SharpAviRecorder] Stopping...");
             _isRecording = false;
             
-            // Signal video thread to stop
+            // Señalizar al hilo de video para que termine
             _stopEvent.Set();
-            _videoThread?.Join(1000); // Wait max 1s
+            _videoThread?.Join(1000); // Esperar máximo 1s
             
-            // Stop Audio
+            // Detener Audio
             _audioCapture?.StopRecording();
             
-            // Close Writer
+            // Cerrar Writer y liberar recursos
             Cleanup();
             Debug.WriteLine("[SharpAviRecorder] Stopped.");
         }
 
+        /// <summary>
+        /// Inicializa la captura de audio loopback (lo que se oye en los altavoces).
+        /// Configura la conversión automática de IEEE Float (WASAPI) a PCM 16-bit (SharpAvi).
+        /// </summary>
         private void InitializeAudioCapture()
         {
             try
             {
                 _audioCapture = new WasapiLoopbackCapture();
                 
-                // WASAPI is usually 32-bit Float. SharpAvi works best with standard 16-bit PCM.
-                // We will convert Float -> 16-bit PCM on the fly to fix "oversaturation" noise.
+                // WASAPI entrega audio en Float 32-bit. SharpAvi trabaja mejor con PCM 16-bit estándar.
+                // Convertiremos Float -> 16-bit PCM al vuelo para evitar ruido/saturación.
                 
                 int sourceChannels = _audioCapture.WaveFormat.Channels;
                 int sourceSampleRate = _audioCapture.WaveFormat.SampleRate;
                 
-                // Define the Target Format (16-bit PCM)
-                _audioStream = _writer!.AddAudioStream(sourceChannels, sourceSampleRate, 16); // 16 bits per sample
+                // Definir formato destino (16-bit PCM)
+                _audioStream = _writer!.AddAudioStream(sourceChannels, sourceSampleRate, 16); // 16 bits por muestra
                 _audioStream.Name = "System Audio";
                 
                 _audioCapture.DataAvailable += (s, e) =>
                 {
                     if (_isRecording && _audioStream != null && e.BytesRecorded > 0)
                     {
-                        // CONVERSION: Float (4 bytes) -> PCM 16 (2 bytes)
-                        // Input: e.Buffer (byte[]) containing Floats
-                        // Output: New byte[] containing Shorts
+                        // CONVERSIÓN: Float (4 bytes/sample) -> PCM 16 (2 bytes/sample)
                         
                         byte[] buffer = e.Buffer;
                         int bytesRecorded = e.BytesRecorded;
                         
-                        // Calculate sample count (Float = 4 bytes)
+                        // Calcular cantidad de muestras (Float = 4 bytes)
                         int sampleCount = bytesRecorded / 4;
                         
-                        // Output buffer size (Short = 2 bytes) -> Half the size
+                        // Tamaño buffer salida (Short = 2 bytes) -> Mitad de tamaño
                         byte[] pcmBuffer = new byte[sampleCount * 2];
-                        
-                        // Unsafe optimization not needed for audio rates, simple loop is fast enough
-                        // But using float array is cleaner
                         
                         for (int i = 0; i < sampleCount; i++)
                         {
-                            // Read Float
+                            // Leer Float
                             float sample = BitConverter.ToSingle(buffer, i * 4);
                             
-                            // Clamp -1.0 to 1.0 (prevent wrapping clipping)
+                            // Clamp -1.0 a 1.0 (prevenir distorsión por wrapping)
                             if (sample > 1.0f) sample = 1.0f;
                             if (sample < -1.0f) sample = -1.0f;
                             
-                            // Scale to Short Range
+                            // Escalar al rango Short (16-bit signed)
                             short pcm = (short)(sample * 32767);
                             
-                            // Write Short
+                            // Escribir Short (Little Endian)
                             pcmBuffer[i * 2] = (byte)(pcm & 0xFF);
                             pcmBuffer[i * 2 + 1] = (byte)((pcm >> 8) & 0xFF);
                         }
@@ -189,22 +199,27 @@ namespace ClipStudioDesktop.Services.Video
             }
         }
 
+        /// <summary>
+        /// Bucle principal de captura de video. Se ejecuta en un hilo de alta prioridad.
+        /// Intenta mantener una tasa de frames constante (CFR) ajustando los tiempos de espera
+        /// y duplicando frames si el sistema se retrasa.
+        /// </summary>
         private void VideoLoop()
         {
             using var bitmap = new Bitmap(_width, _height);
             using var graphics = Graphics.FromImage(bitmap);
             
-            // Encoder setup
+            // Configurar encoder JPEG
             var encoderParams = new EncoderParameters(1);
             encoderParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)_quality); 
             var jpegCodec = ImageCodecInfo.GetImageDecoders().FirstOrDefault(codec => codec.FormatID == ImageFormat.Jpeg.Guid);
             if (jpegCodec == null) return;
             
-            // Reusable memory stream
+            // MemoryStream reutilizable
             using var ms = new MemoryStream();
 
-            // TIMING LOGIC (Constant Frame Rate)
-            // We must write exactly 'fps' frames for every 1 second of wall-clock time.
+            // LÓGICA DE SINCRONIZACIÓN (Constant Frame Rate)
+            // Debemos escribir exactamente 'fps' frames por cada segundo de tiempo real.
             
             double msPerFrame = 1000.0 / _frameRate;
             long startTime = Stopwatch.GetTimestamp();
@@ -214,40 +229,40 @@ namespace ClipStudioDesktop.Services.Video
             {
                 while (!_stopEvent.WaitOne(0))
                 {
-                    // 1. Calculate how many frames SHOULD exist by now
+                    // 1. Calcular cuántos frames DEBERÍAN existir en este momento
                     long now = Stopwatch.GetTimestamp();
                     double elapsedSeconds = (double)(now - startTime) / Stopwatch.Frequency;
                     long targetFrameCount = (long)(elapsedSeconds * _frameRate);
                     
-                    // 2. If we are ahead (have written enough), wait
+                    // 2. Si vamos adelantados (ya escribimos suficientes), esperar
                     if (framesWritten > targetFrameCount)
                     {
-                        // Calculate wait time
+                        // Calcular tiempo de espera
                         int waitMs = (int)(msPerFrame * (framesWritten - targetFrameCount));
                         if (waitMs > 1) 
                         {
-                            Thread.Sleep(Math.Min(waitMs, 10)); // Sleep in small chunks to stay responsive
+                            Thread.Sleep(Math.Min(waitMs, 10)); // Dormir en trozos pequeños para mantener responsividad
                             continue;
                         }
                     }
                     
-                    // 3. Capture ONE Frame
-                    // (Even if we are WAY behind, we capture once and write N times to catch up. 
-                    // This avoids GDI+ bottlenecking us further)
+                    // 3. Capturar UN frame
+                    // (Incluso si vamos muy atrasados, capturamos una vez y escribimos N veces para alcanzar. 
+                    // Esto evita que GDI+ se convierta en cuello de botella)
                     
                     graphics.CopyFromScreen(0, 0, 0, 0, new Size(_width, _height), CopyPixelOperation.SourceCopy);
                     
-                    // Compress
+                    // Comprimir a MJPEG
                     ms.SetLength(0);
                     bitmap.Save(ms, jpegCodec, encoderParams);
                     byte[] jpegData = ms.ToArray();
 
-                    // 4. Determine Write Count
-                    // If we are behind, we write multiple times to catch up to wall-clock of NEXT frame
+                    // 4. Determinar cuenta de escritura
+                    // Si vamos atrasados, escribimos múltiples veces para alcanzar el reloj del SIGUIENTE frame
                     long framesNeeded = (targetFrameCount + 1) - framesWritten;
-                    if (framesNeeded < 1) framesNeeded = 1; // Always write at least 1 if we did the work
+                    if (framesNeeded < 1) framesNeeded = 1; // Siempre escribir al menos 1 si hicimos el trabajo
                     
-                    // Cap duplicate frames to avoid massive files if we freeze (e.g. max 5 dupes per loop)
+                    // Limitar duplicados para evitar archivos gigantes si hay congelamiento (ej. max 5 por ciclo)
                     if (framesNeeded > 5) framesNeeded = 5; 
 
                     lock (_syncLock)

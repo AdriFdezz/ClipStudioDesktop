@@ -15,12 +15,20 @@ using System.Windows.Input;
 
 namespace ClipStudioDesktop.ViewModels
 {
+    /// <summary>
+    /// Modelo simple para representar un dispositivo de micrófono en la UI.
+    /// </summary>
     public class MicrophoneDevice
     {
         public string DisplayName { get; set; } = "";
         public string DeviceName { get; set; } = "";
     }
 
+    /// <summary>
+    /// ViewModel principal de la aplicación.
+    /// Gestiona el estado de la UI, la interacción con los servicios de grabación,
+    /// la configuración y las estadísticas en tiempo real.
+    /// </summary>
     public class MainViewModel : ViewModelBase
     {
         private readonly ISettingsService _settingsService;
@@ -31,12 +39,19 @@ namespace ClipStudioDesktop.ViewModels
         private bool _isMicMonitorEnabled;
         private double _micLevel;
         
+        /// <summary>
+        /// Acceso directo a la configuración global para el Binding en XAML.
+        /// </summary>
         public AppSettings Settings => _settingsService.CurrentSettings;
 
         public ObservableCollection<string> AudioDevices { get; set; } = new ObservableCollection<string>();
         public ObservableCollection<MicrophoneDevice> AvailableMicrophones { get; set; } = new ObservableCollection<MicrophoneDevice>();
         
         private string _selectedAudioDevice = "";
+        /// <summary>
+        /// Dispositivo de audio de escritorio seleccionado (Loopback).
+        /// Actualiza la configuración al cambiar.
+        /// </summary>
         public string SelectedAudioDevice
         {
             get => _selectedAudioDevice;
@@ -60,7 +75,7 @@ namespace ClipStudioDesktop.ViewModels
 
         public string BufferSizeText { get; private set; } = "0 MB";
         
-        // Properties for stats
+        // Propiedades para estadísticas
         public string AudioClipsText { get; private set; } = "0";
         public string VideoClipsText { get; private set; } = "0";
         public string ImagesText { get; private set; } = "0";
@@ -75,7 +90,7 @@ namespace ClipStudioDesktop.ViewModels
         public ICommand OpenImagesFolderCommand { get; }
         public ICommand ReloadSettingsCommand { get; }
 
-        // Mic Monitor properties
+        // Propiedades de Monitor de Micrófono
         public bool IsMicMonitorEnabled
         {
             get => _isMicMonitorEnabled;
@@ -90,6 +105,9 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Nivel actual del micrófono (0.0 a 1.0) para el vúmetro visual.
+        /// </summary>
         public double MicLevel
         {
             get => _micLevel;
@@ -101,6 +119,9 @@ namespace ClipStudioDesktop.ViewModels
         }
 
 
+        /// <summary>
+        /// Activa o desactiva el monitoreo del micrófono (vúmetro visual).
+        /// </summary>
         private void ToggleMicMonitor(bool enable)
         {
             if (enable)
@@ -139,9 +160,10 @@ namespace ClipStudioDesktop.ViewModels
             LoadAudioDevices();
             LoadAvailableMicrophones();
             
+            // Timer para actualizar estadísticas (clips y espacio) cada 100ms
             _timer = new System.Windows.Threading.DispatcherTimer();
             _timer.Interval = TimeSpan.FromMilliseconds(100);
-            _timer.Tick += UpdateStats; // Mantener timer para clips y espacio usado
+            _timer.Tick += UpdateStats; 
             _timer.Start();
             
             // Suscribirse a cambios en tiempo real del buffer
@@ -151,6 +173,10 @@ namespace ClipStudioDesktop.ViewModels
             UpdateStats(null, EventArgs.Empty);
         }
 
+        /// <summary>
+        /// Callback invocado cuando cambia el estado global de grabación (Start/Stop).
+        /// Actualiza los textos de los botones y el estado de la UI.
+        /// </summary>
         private void OnRecordingStateChanged(object? sender, bool isRecording)
         {
              System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -160,7 +186,7 @@ namespace ClipStudioDesktop.ViewModels
                  OnPropertyChanged(nameof(AudioButtonText));
                  OnPropertyChanged(nameof(IsVideoCaptureEnabled));
                  OnPropertyChanged(nameof(IsAudioCaptureEnabled));
-                 OnPropertyChanged(nameof(IsRecording)); // Notify change
+                 OnPropertyChanged(nameof(IsRecording)); // Notificar cambio
 
                  if (!isRecording) 
                  {
@@ -171,6 +197,9 @@ namespace ClipStudioDesktop.ViewModels
              });
         }
 
+        /// <summary>
+        /// Callback invocado cuando cambia el uso del búfer en memoria.
+        /// </summary>
         private void OnBufferSizeChanged(object? sender, (long Estimated, long Physical) sizes)
         {
              System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -195,18 +224,21 @@ namespace ClipStudioDesktop.ViewModels
 
 
 
+        /// <summary>
+        /// Calcula y actualiza el texto de estadísticas del búfer y el espacio restante.
+        /// </summary>
         private void UpdateBufferStats(long estimatedBytes, long physicalBytes)
         {
             try
             {
-                // Current RAW Size
+                // Tamaño RAW Actual del Buffer
                 string physStr = FormatBytes(physicalBytes);
                 BufferSizeText = physStr;
                 
-                // Remaining Space Logic
+                // Lógica de Espacio Restante
                 double maxGB = _settingsService.CurrentSettings.Buffer.MaxBufferSizeGB;
                 
-                if (maxGB <= 0.001) // 0 = Unlimited
+                if (maxGB <= 0.001) // 0 = Ilimitado
                 {
                     RemainingSpace = "Espacio Restante: Sin Límite";
                 }
@@ -243,6 +275,10 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Carga los dispositivos de salida de audio del sistema utilizando FFmpeg (dshow).
+        /// Identifica dispositivos de loopback como "Stereo Mix" o "VoiceMeeter" para capturar audio de escritorio.
+        /// </summary>
         private void LoadAudioDevices()
         {
             AudioDevices.Clear();
@@ -257,7 +293,7 @@ namespace ClipStudioDesktop.ViewModels
                     return;
                 }
 
-                // Use FFmpeg to list audio devices
+                // Usar FFmpeg para listar dispositivos (-list_devices true)
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = ffmpegPath,
@@ -275,8 +311,8 @@ namespace ClipStudioDesktop.ViewModels
                     string output = process.StandardError.ReadToEnd();
                     process.WaitForExit();
 
-                    // Parse for audio devices that can capture desktop audio
-                    // These include: VoiceMeeter Output, Stereo Mix, CABLE Output, etc.
+                    // Parsear salida para encontrar dispositivos capaces de capturar audio en bucle (loopback)
+                    // Ejemplos: VoiceMeeter Output, Mezcla estéreo, Cable Output, etc.
                     var lines = output.Split('\n');
                     string? voiceMeeterDevice = null;
                     string? stereoMixDevice = null;
@@ -285,6 +321,7 @@ namespace ClipStudioDesktop.ViewModels
                     {
                         string trimmedLine = line.Trim();
                         
+                        // Formato típico ffmpeg dshow:  [dshow @ ...]  "Nombre Dispositivo" (audio)
                         if (trimmedLine.Contains("(audio)") && trimmedLine.Contains("\""))
                         {
                             int firstQuote = trimmedLine.IndexOf("\"");
@@ -295,7 +332,7 @@ namespace ClipStudioDesktop.ViewModels
                                 {
                                     string deviceName = trimmedLine.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
                                     
-                                    // Check if this is a loopback/virtual audio device
+                                    // Filtrar dispositivos virtuales de loopback
                                     string lowerName = deviceName.ToLower();
                                     bool isLoopback = lowerName.Contains("voicemeeter output") ||
                                                      lowerName.Contains("stereo mix") ||
@@ -308,7 +345,7 @@ namespace ClipStudioDesktop.ViewModels
                                     {
                                         AudioDevices.Add(deviceName);
                                         
-                                        // Track preferred devices for auto-selection
+                                        // Rastrear preferencias para autoselección
                                         if (lowerName.Contains("voicemeeter output") && !lowerName.Contains("aux"))
                                         {
                                             voiceMeeterDevice = deviceName;
@@ -323,7 +360,7 @@ namespace ClipStudioDesktop.ViewModels
                         }
                     }
                     
-                    // Auto-select best available device
+                    // Auto-seleccionar el mejor dispositivo disponible
                     string savedDevice = _settingsService.CurrentSettings.Audio.SelectedAudioDevice;
                     if (!string.IsNullOrEmpty(savedDevice) && AudioDevices.Contains(savedDevice))
                     {
@@ -339,7 +376,7 @@ namespace ClipStudioDesktop.ViewModels
                     }
                     else if (AudioDevices.Count > 1)
                     {
-                        SelectedAudioDevice = AudioDevices[1]; // First real device
+                        SelectedAudioDevice = AudioDevices[1]; // Primer dispositivo real encontrado
                     }
                     else
                     {
@@ -356,6 +393,10 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Carga los micrófonos disponibles utilizando NAudio (CoreAudioApi).
+        /// Selecciona automáticamente el micrófono guardado o el predeterminado.
+        /// </summary>
         private void LoadAvailableMicrophones()
         {
             AvailableMicrophones.Clear();
@@ -367,7 +408,7 @@ namespace ClipStudioDesktop.ViewModels
             
             try
             {
-                // Use NAudio to list audio capture devices (Wasapi)
+                // Usar NAudio para enumerar dispositivos de captura activos
                 using (var enumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator())
                 {
                     var devices = enumerator.EnumerateAudioEndPoints(NAudio.CoreAudioApi.DataFlow.Capture, NAudio.CoreAudioApi.DeviceState.Active);
@@ -387,10 +428,9 @@ namespace ClipStudioDesktop.ViewModels
                 
                 Debug.WriteLine($"Total microphones found: {AvailableMicrophones.Count}");
                 
-                // Select default microphone if nothing is saved or saved one doesn't exist
+                // Seleccionar micrófono por defecto si no hay configuración
                 if (string.IsNullOrEmpty(_settingsService.CurrentSettings.Audio.SelectedMicrophone))
                 {
-                    // Select the default (first item - "Micrófono predeterminado")
                     if (AvailableMicrophones.Count > 0)
                     {
                         _settingsService.CurrentSettings.Audio.SelectedMicrophone = AvailableMicrophones[0].DeviceName;
@@ -403,7 +443,7 @@ namespace ClipStudioDesktop.ViewModels
                     var foundMic = AvailableMicrophones.FirstOrDefault(m => m.DeviceName == savedMic);
                     if (foundMic == null && AvailableMicrophones.Count > 0)
                     {
-                        // If saved mic not found, select default
+                        // Si el micrófono guardado no existe (desconectado), usar default
                         _settingsService.CurrentSettings.Audio.SelectedMicrophone = AvailableMicrophones[0].DeviceName;
                         OnPropertyChanged(nameof(Settings));
                     }
@@ -415,9 +455,14 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Actualiza las estadísticas de la sesión (duración) y escanea las carpetas
+        /// para calcular clips totales y espacio utilizado.
+        /// Se ejecuta periódicamente vía Timer (100ms).
+        /// </summary>
         private void UpdateStats(object? sender, EventArgs e)
         {
-            // Duration Logic
+            // Lógica de Duración
             if (_recordingService.IsRecording && _recordingService.CurrentRecordingStartTime.HasValue)
             {
                 var duration = DateTime.Now - _recordingService.CurrentRecordingStartTime.Value;
@@ -431,7 +476,7 @@ namespace ClipStudioDesktop.ViewModels
             OnPropertyChanged(nameof(StatusText));
 
             
-            // Stats updates for clips folder
+            // Actualización de estadísticas para carpetas de clips
             try
             {
                 var audioFiles = GetAllFiles(_storageService.GetAudioFolder());
@@ -458,6 +503,9 @@ namespace ClipStudioDesktop.ViewModels
             OnPropertyChanged(nameof(SpaceUsedText));
         }
 
+        /// <summary>
+        /// Formatea el conteo y tamaño total de un conjunto de archivos.
+        /// </summary>
         private string GetFormattedStats(FileInfo[] files)
         {
             int count = files.Length;
@@ -494,6 +542,9 @@ namespace ClipStudioDesktop.ViewModels
             await _recordingService.ToggleRecordingAsync(videoEnabled: false);
         }
 
+        /// <summary>
+        /// Guarda la configuración actual en disco y solicita reinicio si es necesario.
+        /// </summary>
         private void SaveSettings()
         {
             _settingsService.SaveSettings();
@@ -514,6 +565,9 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Restablece la configuración a los valores de fábrica.
+        /// </summary>
         private void ResetSettings()
         {
             if (System.Windows.MessageBox.Show("¿Estás seguro de que quieres restaurar los valores por defecto?", "Confirmar", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.Yes)
@@ -528,17 +582,24 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Recarga la configuración desde el archivo JSON.
+        /// Útil si se edita el archivo externamente mientras la app corre.
+        /// </summary>
         private void ReloadSettings()
         {
             _settingsService.LoadSettings();
             OnPropertyChanged(nameof(Settings));
         }
 
+        /// <summary>
+        /// Reinicia la aplicación actual. Soluciona problemas de ruta con .NET 5+.
+        /// </summary>
         private void RestartApplication()
         {
             var fileName = Process.GetCurrentProcess().MainModule?.FileName;
             
-            // Fix for .NET Core/5+ where MainModule might point to .dll
+            // Fix para .NET Core/5+ donde MainModule puede apuntar a la .dll en lugar del .exe
             if (fileName != null && fileName.EndsWith(".dll"))
             {
                 fileName = System.IO.Path.ChangeExtension(fileName, ".exe");
@@ -551,6 +612,10 @@ namespace ClipStudioDesktop.ViewModels
             }
         }
 
+        /// <summary>
+        /// Abre una carpeta en el explorador de archivos de Windows.
+        /// </summary>
+        /// <param name="path">Ruta absoluta del directorio a abrir.</param>
         private void OpenFolder(string path)
         {
             try

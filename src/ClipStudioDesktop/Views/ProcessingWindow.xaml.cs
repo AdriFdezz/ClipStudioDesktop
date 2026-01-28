@@ -6,13 +6,17 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace ClipStudioDesktop.Views
 {
+    /// <summary>
+    /// Ventana flotante que muestra el progreso de conversión/procesamiento.
+    /// Incluye barra de progreso, tiempo estimado y protección contra cierres accidentales.
+    /// </summary>
     public partial class ProcessingWindow : Window
     {
         private bool _wasTopmost = true;
         private bool _isClosingProgrammatically = false;
 
         /// <summary>
-        /// Event raised when user confirms cancellation of the conversion.
+        /// Evento lanzado cuando el usuario confirma la cancelación de la conversión.
         /// </summary>
         public event EventHandler? CancellationRequested;
 
@@ -23,7 +27,7 @@ namespace ClipStudioDesktop.Views
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            // Position window in the center of the primary screen
+            // Posicionar ventana en el centro de la pantalla principal
             var primaryScreen = Screen.PrimaryScreen;
             if (primaryScreen != null)
             {
@@ -35,14 +39,14 @@ namespace ClipStudioDesktop.Views
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            // When user clicks another window, go behind but don't disappear
+            // Cuando el usuario pincha fuera, mantenerlo detrás pero visible (sin TopMost)
             Topmost = false;
             _wasTopmost = false;
         }
 
         private void Window_Activated(object sender, EventArgs e)
         {
-            // When user clicks back on this window, restore topmost
+            // Al volver a enfocar, restaurar TopMost
             if (!_wasTopmost)
             {
                 Topmost = true;
@@ -52,13 +56,13 @@ namespace ClipStudioDesktop.Views
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
-            // If closing programmatically (conversion finished), allow it
+            // Si se cierra programáticamente (conversión terminada), permitirlo
             if (_isClosingProgrammatically)
             {
                 return;
             }
 
-            // User is trying to close manually - show confirmation
+            // El usuario intenta cerrar manualmente - mostrar confirmación
             var result = MessageBox.Show(
                 "¿Estás seguro de que deseas cancelar la conversión?\n\nSi cancelas, perderás el contenido grabado.",
                 "Cancelar Conversión",
@@ -68,19 +72,19 @@ namespace ClipStudioDesktop.Views
 
             if (result == MessageBoxResult.Yes)
             {
-                // User confirmed - raise cancellation event
+                // Usuario confirmó - lanzar evento de cancelación
                 CancellationRequested?.Invoke(this, EventArgs.Empty);
                 _isClosingProgrammatically = true;
             }
             else
             {
-                // User cancelled - don't close
+                // Usuario canceló el cierre - mantener ventana
                 e.Cancel = true;
             }
         }
 
         /// <summary>
-        /// Closes the window without showing confirmation (for programmatic close after conversion).
+        /// Cierra la ventana sin confirmación (usado al terminar la conversión con éxito).
         /// </summary>
         public void CloseWithoutConfirmation()
         {
@@ -94,10 +98,10 @@ namespace ClipStudioDesktop.Views
         }
 
         /// <summary>
-        /// Updates the progress display with percentage and time remaining.
+        /// Actualiza la visualización de progreso con porcentaje y tiempo restante.
         /// </summary>
-        /// <param name="percent">Progress percentage (0-100)</param>
-        /// <param name="remaining">Estimated time remaining, or null if unknown</param>
+        /// <param name="percent">Porcentaje de progreso (0-100).</param>
+        /// <param name="remaining">Tiempo estimado restante (opcional).</param>
         public void UpdateProgress(double percent, TimeSpan? remaining)
         {
             if (!Dispatcher.CheckAccess())
@@ -106,9 +110,7 @@ namespace ClipStudioDesktop.Views
                 return;
             }
 
-            // Clamp percent
-            percent = Math.Max(0, Math.Min(100, percent));
-            
+            percent = Math.Max(0, Math.Min(100, percent));         
             ProgressBar.Value = percent;
             PercentText.Text = $"{percent:F0}%";
 
@@ -134,7 +136,7 @@ namespace ClipStudioDesktop.Views
         }
 
         /// <summary>
-        /// Sets the title text of the processing window.
+        /// Establece el texto del título de la ventana de proceso.
         /// </summary>
         public void SetTitle(string title)
         {

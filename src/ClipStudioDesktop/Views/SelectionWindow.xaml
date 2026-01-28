@@ -13,22 +13,22 @@
         Background="Black"
         Cursor="None">
     <Grid>
-        <!-- Background Image (The frozen screen) -->
+        <!-- Imagen de Fondo (Captura de pantalla congelada) -->
         <Image x:Name="BackgroundImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
         
-        <!-- Dark Overlay with Hole -->
+        <!-- Capa Oscura (Overlay) con Agujero -->
         <Path Fill="Black" Opacity="0.6" IsHitTestVisible="False">
             <Path.Data>
                 <GeometryGroup FillRule="EvenOdd">
-                    <!-- Full screen coverage (using a large enough rect) -->
+                    <!-- Cubre toda la pantalla -->
                     <RectangleGeometry Rect="-10000,-10000,20000,20000" />
-                    <!-- The hole for selection -->
+                    <!-- El agujero transparente para la selección -->
                     <RectangleGeometry x:Name="HoleGeometry" />
                 </GeometryGroup>
             </Path.Data>
         </Path>
         
-        <!-- Selection Area -->
+        <!-- Canvas de Selección -->
         <Canvas x:Name="SelectionCanvas" Background="Transparent" MouseDown="Canvas_MouseDown" MouseMove="Canvas_MouseMove" MouseUp="Canvas_MouseUp">
             <Path x:Name="SelectionPath" Stroke="White" StrokeThickness="1" StrokeDashArray="4 2">
                 <Path.Data>
@@ -36,16 +36,16 @@
                 </Path.Data>
             </Path>
             
-            <!-- Dimensions Text -->
+            <!-- Texto con Dimensiones (Ancho x Alto) -->
             <Border x:Name="DimensionsBorder" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="1" CornerRadius="4" Padding="6,4" Visibility="Collapsed">
                 <TextBlock x:Name="DimensionsText" Foreground="{StaticResource TextBrush}" FontSize="12" FontWeight="SemiBold"/>
             </Border>
         </Canvas>
 
-        <!-- Custom Crosshair Cursor Layer -->
+        <!-- Capa para el Cursor Personalizado (Cruz) -->
         <Canvas IsHitTestVisible="False">
             <Canvas x:Name="CustomCursorCanvas">
-                <!-- Outline (Black) -->
+                <!-- Borde Negro (Contorno) -->
                 <Path Stroke="Black" StrokeThickness="3">
                     <Path.Data>
                         <GeometryGroup>
@@ -54,7 +54,7 @@
                         </GeometryGroup>
                     </Path.Data>
                 </Path>
-                <!-- Core (White) -->
+                <!-- Núcleo Blanco -->
                 <Path Stroke="White" StrokeThickness="2">
                     <Path.Data>
                         <GeometryGroup>
@@ -63,7 +63,7 @@
                         </GeometryGroup>
                     </Path.Data>
                 </Path>
-                <!-- Center Point (Black) -->
+                <!-- Punto Central -->
                 <Ellipse Width="4" Height="4" Fill="Black" Canvas.Left="-2" Canvas.Top="-2" />
             </Canvas>
         </Canvas>

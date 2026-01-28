@@ -6,11 +6,22 @@ using System.Text.Json;
 
 namespace ClipStudioDesktop.Services.Settings
 {
+    /// <summary>
+    /// Implementación del servicio de configuración usando archivos JSON.
+    /// Almacena la configuración en AppData/ClipStudioDesktop/config.json.
+    /// </summary>
     public class SettingsService : ISettingsService
     {
         private readonly string _configPath;
+        
+        /// <summary>
+        /// Propiedad pública para acceder a los ajustes actuales en memoria.
+        /// </summary>
         public AppSettings CurrentSettings { get; private set; }
 
+        /// <summary>
+        /// Constructor que inicializa la ruta del archivo de configuración y carga los ajustes.
+        /// </summary>
         public SettingsService()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -22,6 +33,10 @@ namespace ClipStudioDesktop.Services.Settings
             LoadSettings();
         }
 
+        /// <summary>
+        /// Carga los ajustes desde el archivo JSON.
+        /// Si el archivo está corrupto o no existe, restablece a valores predeterminados.
+        /// </summary>
         public void LoadSettings()
         {
             if (File.Exists(_configPath))
@@ -34,7 +49,7 @@ namespace ClipStudioDesktop.Services.Settings
                     {
                         CurrentSettings = settings;
                         
-                        // Ensure new hotkeys exist if updating from old version
+                        // Asegurar que existan atajos nuevos si se actualiza desde una versión anterior
                         EnsureHotkeys(CurrentSettings);
                         
                         return;
@@ -42,19 +57,22 @@ namespace ClipStudioDesktop.Services.Settings
                 }
                 catch
                 {
-                    // Log error or ignore to use defaults
+                    // Error de carga o deserialización: se ignorará para usar los valores por defecto
                 }
             }
 
-            // If file doesn't exist or failed to load, use defaults and save
+             // Si el archivo no existe o falló la carga, usar valores por defecto y guardar
             ResetToDefaults();
         }
 
+        /// <summary>
+        /// Verifica y añade atajos de teclado críticos que puedan faltar en configuraciones antiguas.
+        /// </summary>
         private void EnsureHotkeys(AppSettings settings)
         {
             bool changed = false;
             
-            // Check for Alt+V (Clipboard Selection)
+            // Verificar Alt+V (Selección al Portapapeles)
             if (!settings.Hotkeys.Exists(h => h.Type == "screenshot" && h.Mode == "selection_clipboard"))
             {
                 settings.Hotkeys.Add(new HotKeyConfig { Key = "Alt+C", Type = "screenshot", Mode = "selection_clipboard" });
@@ -67,6 +85,9 @@ namespace ClipStudioDesktop.Services.Settings
             }
         }
 
+        /// <summary>
+        /// Serializa y guarda la configuración actual en el archivo JSON.
+        /// </summary>
         public void SaveSettings()
         {
             try
@@ -77,15 +98,19 @@ namespace ClipStudioDesktop.Services.Settings
             }
             catch
             {
-                // Handle save error
+                // Manejar error de guardado silenciosamente o loggear
             }
         }
 
+        /// <summary>
+        /// Restablece la configuración a los valores de fábrica y guarda el archivo.
+        /// Define los atajos de teclado predeterminados.
+        /// </summary>
         public void ResetToDefaults()
         {
             CurrentSettings = new AppSettings();
             
-            // Initialize default hotkeys
+            // Inicializar atajos por defecto
             CurrentSettings.Hotkeys = new List<HotKeyConfig>
             {
                 new() { Key = "Ctrl+Alt+A", Type = "audio", Duration = 0 },

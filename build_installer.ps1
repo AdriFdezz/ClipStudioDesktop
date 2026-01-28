@@ -1,4 +1,4 @@
-# Build Installer Script
+# Script del Instalador (Build Installer)
 # Este script compila la aplicación y genera el instalador MSI usando WiX Toolset
 
 $ErrorActionPreference = "Stop"

@@ -18,6 +18,11 @@ using NAudio.Wave;
 
 namespace ClipStudioDesktop
 {
+    /// <summary>
+    /// Lógica de interacción principal para App.xaml.
+    /// Gestiona el ciclo de vida de la aplicación, instancia única (Mutex),
+    /// inicialización de servicios (DI manual) y el icono de la bandeja del sistema.
+    /// </summary>
     public partial class App : System.Windows.Application
     {
         private static Mutex? _mutex;
@@ -29,25 +34,24 @@ namespace ClipStudioDesktop
         private IScreenshotService _screenshotService = null!;
         private MainViewModel _mainViewModel = null!;
         private Views.MainWindow _mainWindow = null!;
-        // We need a window to attach hotkeys to, even if hidden
+        // Necesitamos una ventana para adjuntar los atajos de teclado, incluso si está oculta
         private Window _messageWindow = null!;
         private string? _lastSavedFilePath;
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            // Single instance check
-            // Single instance check with Retry for Auto-Restart
+            // Verificación de Instancia Única y Reintentos para Reinicio Automático
             const string mutexName = "ClipStudioDesktop_SingleInstance_Mutex";
             bool createdNew = false;
             
-            for (int i = 0; i < 10; i++) // Try for up to 2 seconds (10 * 200ms)
+            for (int i = 0; i < 10; i++) // Intentar por hasta 2 segundos (10 * 200ms)
             {
                 try
                 {
                     _mutex = new Mutex(true, mutexName, out createdNew);
                     if (createdNew) break;
                     
-                    // If mutex exists but belongs to another process, dispose our handle and wait
+                    // Si el mutex existe pero pertenece a otro proceso, liberar y esperar
                     _mutex.Dispose();
                     _mutex = null;
                     System.Threading.Thread.Sleep(200);
@@ -61,7 +65,8 @@ namespace ClipStudioDesktop
             if (_mutex == null || !createdNew)
             {
                 // Ya hay una instancia ejecutándose
-                // Don't show message box on silent failures/restarts if desirable, but keeping it for now
+                // No mostramos MessageBox en fallos silenciosos/reinicios si se desea, pero lo mantenemos por ahora comentado
+
                 // System.Windows.MessageBox.Show("Clip Studio Desktop ya está en ejecución.", "Aplicación ya iniciada", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                 Shutdown();
                 return;
@@ -69,44 +74,47 @@ namespace ClipStudioDesktop
             
             base.OnStartup(e);
 
-            // Global exception handling
+            // Manejo Global de Excepciones
+            // Captura excepciones en el hilo de la interfaz de usuario (UI Thread)
             this.DispatcherUnhandledException += (s, args) =>
             {
-                System.Windows.MessageBox.Show($"An unhandled exception occurred: {args.Exception.Message}\n\nStack Trace:\n{args.Exception.StackTrace}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Ocurrió una excepción no controlada: {args.Exception.Message}\n\nTraza de la pila:\n{args.Exception.StackTrace}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 args.Handled = true;
             };
 
+            // Captura excepciones en tareas asíncronas (Task) no observadas
             TaskScheduler.UnobservedTaskException += (s, args) =>
             {
-                System.Windows.MessageBox.Show($"An unobserved task exception occurred: {args.Exception.Message}\n\nStack Trace:\n{args.Exception.StackTrace}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Ocurrió una excepción de tarea no observada: {args.Exception.Message}\n\nTraza de la pila:\n{args.Exception.StackTrace}", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 args.SetObserved();
             };
 
+            // Captura excepciones críticas en el dominio de la aplicación (AppDomain) que no fueron capturadas antes
             AppDomain.CurrentDomain.UnhandledException += (s, args) =>
             {
                 var exception = args.ExceptionObject as Exception;
-                System.Windows.MessageBox.Show($"A critical unhandled exception occurred: {exception?.Message}\n\nStack Trace:\n{exception?.StackTrace}", "Critical Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Ocurrió una excepción crítica no controlada: {exception?.Message}\n\nTraza de la pila:\n{exception?.StackTrace}", "Error Crítico", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             };
 
-            // Initialize Services
+            // Inicializar Servicios (DI Manual)
             _settingsService = new SettingsService();
             _hotKeyService = new HotKeyService();
             _storageService = new StorageService(_settingsService);
             _recordingService = new RecordingService(_settingsService, _storageService);
             _screenshotService = new ScreenshotService(_storageService, _settingsService, _hotKeyService);
 
-            // Apply Startup Setting
+            // Aplicar configuración de inicio
             StartupHelper.SetStartup(_settingsService.CurrentSettings.General.StartWithWindows);
 
-            // Initialize ViewModel and Window
+            // Inicializar ViewModel y Ventana Principal
             _mainViewModel = new MainViewModel(_settingsService, _storageService, _recordingService);
             _mainWindow = new Views.MainWindow(_mainViewModel);
             _mainWindow.Show();
 
-            // Ensure directories
+            // Asegurar existencia de directorios
             _storageService.EnsureDirectoriesExist();
 
-            // Create a hidden window to handle messages
+            // Crear una ventana oculta para manejar mensajes de Windows (Identificadores de ventana)
             _messageWindow = new Window
             {
                 Width = 0,
@@ -115,20 +123,21 @@ namespace ClipStudioDesktop
                 ShowInTaskbar = false,
                 Visibility = Visibility.Hidden
             };
-            _messageWindow.Show(); // Must show to get handle, but it's 0x0 and hidden
+            _messageWindow.Show(); // Debe mostrarse para obtener el handle, pero es 0x0 y oculta
             var handle = new WindowInteropHelper(_messageWindow).Handle;
             _hotKeyService.Initialize(handle);
 
             RegisterConfiguredHotkeys();
 
-            // Start Recording (Disabled by default)
+            // Iniciar grabación (Deshabilitado por defecto)
             // await _recordingService.StartRecordingAsync();
 
-            // Create the TaskbarIcon
+            // Crear el Icono de la Bandeja del Sistema (TaskbarIcon)
             _taskbarIcon = new TaskbarIcon();
             _taskbarIcon.ToolTipText = "Clip Studio Desktop";
             
-            // Load custom icon
+            // Cargar icono personalizado
+
             try 
             {
                 var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "Clip_Studio_Desktop_ico.ico");
@@ -150,23 +159,23 @@ namespace ClipStudioDesktop
             {
                 if (!string.IsNullOrEmpty(_lastSavedFilePath) && System.IO.File.Exists(_lastSavedFilePath))
                 {
-                    await Task.Delay(100); // Tiny delay for visual smoothness
+                    await Task.Delay(100); // Pequeño delay para suavidad visual
                     ShowFileInExplorer(_lastSavedFilePath);
                 }
             };
 
-            // Create Context Menu
+            // Crear Menú Contextual (Tray Menu)
             var contextMenu = new System.Windows.Controls.ContextMenu();
 
-            // Video Recording
+            // Opción: Grabar Video
             var videoItem = new System.Windows.Controls.MenuItem();
             videoItem.Header = "Grabar Video";
             
-            // Audio Recording
+            // Opción: Grabar Audio
             var audioItem = new System.Windows.Controls.MenuItem();
             audioItem.Header = "Grabar Audio";
 
-            // Local Helper to update menu state
+            // Función local para actualizar estado del menú
             void UpdateMenuState(bool isRecording)
             {
                 bool isVideoMode = _recordingService.IsVideoMode;
@@ -187,12 +196,12 @@ namespace ClipStudioDesktop
                         videoItem.IsEnabled = true;
                         
                         audioItem.Header = "Grabar Audio";
-                        audioItem.IsEnabled = false; // Mutually exclusive
+                        audioItem.IsEnabled = false; // Mutualmente exclusivo
                     }
                     else
                     {
                         videoItem.Header = "Grabar Video";
-                        videoItem.IsEnabled = false; // Mutually exclusive
+                        videoItem.IsEnabled = false; // Mutualmente exclusivo
                         
                         audioItem.Header = "Detener Audio";
                         audioItem.IsEnabled = true;
@@ -200,13 +209,13 @@ namespace ClipStudioDesktop
                 }
             }
 
-            // Subscribe to state changes
+            // Suscribirse a cambios de estado
             _recordingService.RecordingStateChanged += (s, isRecording) => 
             {
                 this.Dispatcher.Invoke(() => UpdateMenuState(isRecording));
             };
 
-            // Subscribe to ClipSaved event
+            // Suscribirse a evento ClipSaved
             _recordingService.ClipSaved += (s, path) =>
             {
                 this.Dispatcher.Invoke(() =>
@@ -221,7 +230,7 @@ namespace ClipStudioDesktop
                 });
             };
 
-            // Subscribe to ScreenshotSaved event
+            // Suscribirse a evento ScreenshotSaved
             _screenshotService.ScreenshotSaved += (s, path) =>
             {
                 this.Dispatcher.Invoke(() =>
@@ -236,7 +245,7 @@ namespace ClipStudioDesktop
                 });
             };
 
-            // Click Handlers
+            // Manejadores de Clic
             videoItem.Click += async (s, args) => 
             {
                 await _recordingService.ToggleRecordingAsync(videoEnabled: true);
@@ -247,13 +256,13 @@ namespace ClipStudioDesktop
                 await _recordingService.ToggleRecordingAsync(videoEnabled: false);
             };
 
-            // Initial State
+            // Estado Inicial
             UpdateMenuState(_recordingService.IsRecording);
 
             contextMenu.Items.Add(videoItem);
             contextMenu.Items.Add(audioItem);
 
-            // Open Folders
+            // Submenú: Abrir Carpetas
             var openFoldersItem = new System.Windows.Controls.MenuItem();
             openFoldersItem.Header = "Abrir carpeta de clips";
             
@@ -283,7 +292,7 @@ namespace ClipStudioDesktop
 
             _taskbarIcon.ContextMenu = contextMenu;
             
-            // Handle double click to open config
+            // Manejar doble clic para abrir configuración
             _taskbarIcon.TrayMouseDoubleClick += (s, args) => OpenConfiguration();
         }
 
@@ -336,7 +345,7 @@ namespace ClipStudioDesktop
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Exception in hotkey handler: {ex.Message}\n{ex.StackTrace}");
+                            System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Excepción en manejador de atajo: {ex.Message}\n{ex.StackTrace}");
                             System.Windows.MessageBox.Show($"Error al ejecutar atajo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
                     });
@@ -344,13 +353,13 @@ namespace ClipStudioDesktop
                 }
                 catch (Exception ex)
                 {
-                    // Log error registering hotkey
+                    // Registrar error al registrar atajo
                     failCount++;
-                    System.Diagnostics.Debug.WriteLine($"Failed to register hotkey {hotkey.Key}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Error al registrar atajo {hotkey.Key}: {ex.Message}");
                 }
             }
             
-            System.Diagnostics.Debug.WriteLine($"Hotkeys registered: {successCount} success, {failCount} failed");
+            System.Diagnostics.Debug.WriteLine($"Atajos registrados: {successCount} exitosos, {failCount} fallidos");
         }
 
         private void ShowNotification(string title, string message, string? filePath = null)
@@ -362,6 +371,10 @@ namespace ClipStudioDesktop
             }
         }
 
+        /// <summary>
+        /// Abre la ventana principal de configuración.
+        /// Si está minimizada, la restaura.
+        /// </summary>
         private void OpenConfiguration()
         {
             _mainWindow.Show();
@@ -370,6 +383,9 @@ namespace ClipStudioDesktop
                 _mainWindow.WindowState = WindowState.Normal;
         }
 
+        /// <summary>
+        /// Reproduce un sonido de notificación si está habilitado en la configuración.
+        /// </summary>
         private void PlayNotificationSound()
         {
             if (_settingsService.CurrentSettings.General.PlaySoundOnClip)
@@ -395,13 +411,13 @@ namespace ClipStudioDesktop
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Error playing sound: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"Error al reproducir sonido: {ex.Message}");
                     }
                 });
             }
         }
 
-        #region Shell API for Smooth Explorer Transition
+        #region API Shell para transición suave en Explorador
         [DllImport("shell32.dll", ExactSpelling = true)]
         private static extern int SHOpenFolderAndSelectItems(IntPtr pidlFolder, uint cidl, IntPtr apidl, uint dwFlags);
 
@@ -411,6 +427,9 @@ namespace ClipStudioDesktop
         [DllImport("shell32.dll")]
         private static extern void ILFree(IntPtr pidl);
 
+        /// <summary>
+        /// Abre el explorador de archivos con el archivo especificado seleccionado.
+        /// </summary>
         private void ShowFileInExplorer(string filePath)
         {
             if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath)) return;
@@ -430,6 +449,11 @@ namespace ClipStudioDesktop
         }
         #endregion
 
+        /// <summary>
+        /// Método llamado al salir de la aplicación.
+        /// Libera recursos críticos como el icono de la bandeja, servicios y el Mutex.
+        /// </summary>
+        /// <param name="e">Argumentos del evento de salida.</param>
         protected override void OnExit(ExitEventArgs e)
         {
             _taskbarIcon?.Dispose();

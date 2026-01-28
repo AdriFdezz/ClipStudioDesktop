@@ -10,27 +10,40 @@ using System.Linq;
 
 namespace ClipStudioDesktop.Services.Audio
 {
+    /// <summary>
+    /// Gestiona la grabación de audio del sistema (Escritorio) utilizando WASAPI Loopback.
+    /// <para>
+    /// Funciona capturando el flujo de audio directamente desde la tarjeta de sonido, escribiendo los datos crudos (PCM)
+    /// a un archivo temporal y luego convirtiéndolo al formato deseado (MP3/FLAC) usando FFmpeg.
+    /// </para>
+    /// </summary>
     public class AudioRecorder : IDisposable
     {
         private readonly AppSettings _settings;
         private WasapiLoopbackCapture? _capture;
+        
+        /// <summary>
+        /// Formato de onda detectado del dispositivo de audio del sistema (frecuencia, canales, bits).
+        /// </summary>
         public WaveFormat? WaveFormat => _waveFormat;
         private WaveFormat? _waveFormat;
         private bool _isRecording;
         
-        // Disk Buffer
+        // Gestión de Búfer en Disco
         private readonly string _bufferFolder;
-        private readonly string _bufferRootPath; // Ruta raíz del buffer para actualizar la reserva
+        private readonly string _bufferRootPath;
         private FileStream? _currentChunkStream;
         private string? _currentChunkPath;
         private readonly List<string> _chunks = new List<string>();
         private readonly object _lock = new object();
 
-
         private long _currentTotalBytes;
         
+        /// <summary>
+        /// Evento que se dispara cuando hay nuevos datos de audio disponibles.
+        /// Útil para visualizar medidores de volumen (VU Meter).
+        /// </summary>
         public event Action<byte[], int>? AudioDataAvailable;
-
 
         public AudioRecorder(AppSettings settings)
         {
@@ -39,20 +52,25 @@ namespace ClipStudioDesktop.Services.Audio
             _bufferFolder = Path.Combine(_bufferRootPath, "audio");
         }
 
+        /// <summary>
+        /// Inicia la grabación de audio del sistema.
+        /// </summary>
+        /// <param name="outputFilePath">Ruta completa donde se guardará el archivo temporal RAW.</param>
+        /// <returns><c>true</c> si inició correctamente; <c>false</c> si falló.</returns>
         public bool Start(string? outputFilePath)
         {
             if (_isRecording) return true;
 
-
             try 
             {
+                // Asegurar que existe el directorio de caché
                 Directory.CreateDirectory(_bufferFolder);
                 _currentTotalBytes = 0;
                 _currentChunkPath = outputFilePath;
 
-
                 try 
                 {
+                    // Inicializar captura de loopback (audio del sistema)
                     _capture = new WasapiLoopbackCapture();
                 }
                 catch (Exception ex)
@@ -65,12 +83,11 @@ namespace ClipStudioDesktop.Services.Audio
 
                 _waveFormat = _capture.WaveFormat;
                 
-                // Direct stream to the output file
+                // Abrir stream para escribir directamente los datos crudos
                 if (!string.IsNullOrEmpty(_currentChunkPath))
                 {
                     _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
                 }
-
 
                 _capture.DataAvailable += OnDataAvailable;
                 _capture.RecordingStopped += OnRecordingStopped;
@@ -86,6 +103,9 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Detiene la captura de audio y cierra el stream de escritura.
+        /// </summary>
         public void Stop()
         {
             if (!_isRecording) return;
@@ -101,17 +121,22 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Callback invocado por NAudio cuando hay un fragmento de audio disponible.
+        /// </summary>
         private void OnDataAvailable(object? sender, WaveInEventArgs e)
         {
             if (e.BytesRecorded == 0) return;
 
-                if (_currentChunkStream != null)
-                {
-                    _currentChunkStream.Write(e.Buffer, 0, e.BytesRecorded);
-                    _currentTotalBytes += e.BytesRecorded;
-                }
-                
-                AudioDataAvailable?.Invoke(e.Buffer, e.BytesRecorded);
+            // Escribir al archivo temporal
+            if (_currentChunkStream != null)
+            {
+                _currentChunkStream.Write(e.Buffer, 0, e.BytesRecorded);
+                _currentTotalBytes += e.BytesRecorded;
+            }
+            
+            // Notificar a la UI (VU Meter)
+            AudioDataAvailable?.Invoke(e.Buffer, e.BytesRecorded);
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -123,15 +148,13 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
         
-        // Helper to convert the raw PCM/WAV we just recorded to final format if needed
-        // Assuming we record RAW PCM or WAV headerless, we might need to finalize it.
-        // NAudio WasapiLoopbackCapture gives raw PCM in DataAvailable.
-        // If we write directly to .wav, we need a header. 
-        // For now, let's stick to writing raw samples and then converting with FFmpeg as before, 
-        // OR better: write a proper WAV file using WaveFileWriter if possible, but we are manually writing stream.
-        // Let's keep the raw writing and reuse ConvertRawToOutput logic which is robust.
-        
-        public string? FinalizeRecording(string finalOutputFolder, string format)
+        /// <summary>
+        /// Finaliza la grabación convirtiendo el archivo temporal RAW al formato de salida final.
+        /// </summary>
+        /// <param name="finalOutputFolder">Carpeta de destino para el archivo final.</param>
+        /// <param name="format">Formato deseado (ej. "mp3", "wav").</param>
+        /// <returns>La ruta absoluta del archivo final generado, o null si falló.</returns>
+        public async Task<string?> FinalizeRecordingAsync(string finalOutputFolder, string format)
         {
              if (_currentChunkPath == null || !File.Exists(_currentChunkPath)) return null;
 
@@ -141,9 +164,10 @@ namespace ClipStudioDesktop.Services.Audio
                 string extension = format.ToLower() == "wav" ? "wav" : "mp3";
                 string outputFile = Path.Combine(finalOutputFolder, $"recording_audio_{timestamp}.{extension}");
 
-                ConvertRawToOutput(_currentChunkPath, outputFile, format);
+                // Conversión asíncrona usando FFmpeg
+                await ConvertRawToOutputAsync(_currentChunkPath, outputFile, format);
                 
-                // Cleanup temp raw file
+                // Limpiar archivo temporal crudo
                 try { File.Delete(_currentChunkPath); } catch { }
                 
                 return outputFile;
@@ -155,16 +179,19 @@ namespace ClipStudioDesktop.Services.Audio
              }
         }
 
-        private void ConvertRawToOutput(string inputFile, string outputFile, string format)
+        /// <summary>
+        /// Ejecuta FFmpeg para convertir el audio raw PCM al formato destino.
+        /// </summary>
+        private async Task ConvertRawToOutputAsync(string inputFile, string outputFile, string format)
         {
              try
              {
                  string ffmpegPath = FFmpegHelper.GetFFmpegPath();
-                 string pcmFormat = GetFFmpegPcmFormat(_waveFormat!);
+                 string pcmFormat = GetFFmpegPcmFormat(_waveFormat!); // Detectar formato de bits
                  string sampleRate = _waveFormat!.SampleRate.ToString();
                  string channels = _waveFormat!.Channels.ToString();
                  
-                 // Codec selection based on format
+                 // Selección de códec según formato
                  string codecArgs;
                  switch (format.ToLower())
                  {
@@ -172,14 +199,14 @@ namespace ClipStudioDesktop.Services.Audio
                          codecArgs = $"-c:a libmp3lame -b:a {_settings.Audio.Bitrate}k";
                          break;
                      case "flac":
-                         codecArgs = "-c:a flac -compression_level 5"; // FLAC lossless
+                         codecArgs = "-c:a flac -compression_level 5"; // Compresión sin pérdida
                          break;
                      default:
-                         codecArgs = "-c:a libmp3lame -b:a 192k"; // Fallback to MP3
+                         codecArgs = "-c:a libmp3lame -b:a 192k"; // Fallback MP3 básico
                          break;
                  }
 
-                 // Simple conversion without seeking
+                 // Construir comando FFmpeg: Input RAW -> Output codificado
                  string args = $"-y -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \"{inputFile}\" {codecArgs} \"{outputFile}\"";
                  
                  System.Diagnostics.Debug.WriteLine($"FFmpeg command: {args}");
@@ -196,8 +223,10 @@ namespace ClipStudioDesktop.Services.Audio
                  
                  if (p != null)
                  {
-                     string errors = p.StandardError.ReadToEnd();
-                     p.WaitForExit();
+                     // Espera asíncrona para no bloquear UI
+                     string errors = await p.StandardError.ReadToEndAsync();
+                     await p.WaitForExitAsync();
+                     
                      if (p.ExitCode != 0)
                      {
                          System.Diagnostics.Debug.WriteLine($"FFmpeg stderr: {errors}");
@@ -212,9 +241,14 @@ namespace ClipStudioDesktop.Services.Audio
              }
         }
 
+        /// <summary>
+        /// Traduce el formato de NAudio a formato de entrada de FFmpeg.
+        /// </summary>
+        /// <param name="format">Formato de onda NAudio.</param>
+        /// <returns>String de formato PCM para FFmpeg (ej. "f32le", "s16le").</returns>
         private string GetFFmpegPcmFormat(WaveFormat format)
         {
-            if (format.Encoding == WaveFormatEncoding.IeeeFloat) return "f32le";
+            if (format.Encoding == WaveFormatEncoding.IeeeFloat) return "f32le"; // Float 32-bit (común en WASAPI)
             if (format.Encoding == WaveFormatEncoding.Pcm)
             {
                 switch (format.BitsPerSample)
@@ -224,14 +258,17 @@ namespace ClipStudioDesktop.Services.Audio
                     case 32: return "s32le";
                 }
             }
-            return "s16le";
+            return "s16le"; // Default seguro
         }
 
+        /// <summary>
+        /// Libera recursos y limpia archivos temporales.
+        /// </summary>
         public void Dispose()
         {
             Stop();
             
-            // Limpiar todos los chunks al cerrar
+            // Limpieza agresiva de temporales al cerrar
             try
             {
                 lock (_lock)

@@ -14,7 +14,7 @@
         Closing="Window_Closing">
     <Border Background="#2D2D30" BorderBrush="#3E3E42" BorderThickness="1" CornerRadius="8" Padding="20">
         <StackPanel VerticalAlignment="Center">
-            <!-- Title with spinner animation -->
+            <!-- Título con animación de spinner -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
                 <Ellipse x:Name="Spinner" Width="16" Height="16" StrokeThickness="2" Margin="0,0,10,0">
                     <Ellipse.Stroke>
@@ -41,11 +41,11 @@
                 <TextBlock x:Name="TitleText" Text="Convirtiendo grabación..." Foreground="White" FontSize="14" FontWeight="SemiBold"/>
             </StackPanel>
             
-            <!-- Progress bar -->
+            <!-- Barra de Progreso -->
             <ProgressBar x:Name="ProgressBar" Value="0" Minimum="0" Maximum="100" Height="6" 
                          Background="#3E3E42" Foreground="#007ACC" BorderThickness="0" Margin="0,0,0,8"/>
             
-            <!-- Progress info -->
+            <!-- Información de Progreso (Porcentaje y Tiempo) -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

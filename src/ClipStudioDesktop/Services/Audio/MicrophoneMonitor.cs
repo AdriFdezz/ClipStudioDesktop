@@ -6,8 +6,10 @@ using System;
 namespace ClipStudioDesktop.Services.Audio
 {
     /// <summary>
-    /// Service for monitoring microphone input in real-time.
-    /// Provides audio playback (hear yourself) and level metering for VU display.
+    /// Servicio para monitorear la entrada del micrófono en tiempo real.
+    /// <para>
+    /// Proporciona reproducción de audio (escucharse a sí mismo) y medición de niveles para la visualización del VU Meter en la UI.
+    /// </para>
     /// </summary>
     public class MicrophoneMonitor : IDisposable
     {
@@ -19,8 +21,15 @@ namespace ClipStudioDesktop.Services.Audio
         private double _currentLevel;
         private readonly object _levelLock = new object();
 
+        /// <summary>
+        /// Evento que se dispara cuando cambia el nivel de volumen detectado.
+        /// Útil para actualizar la barra de progreso o medidor en la interfaz gráfica.
+        /// </summary>
         public event Action<double>? LevelChanged;
 
+        /// <summary>
+        /// Nivel actual del audio monitorizado (valor normalizado entre 0.0 y 1.0).
+        /// </summary>
         public double CurrentLevel
         {
             get { lock (_levelLock) return _currentLevel; }
@@ -38,13 +47,17 @@ namespace ClipStudioDesktop.Services.Audio
             _settings = settings;
         }
 
+        /// <summary>
+        /// Inicia el monitoreo del micrófono y la reproducción local (si aplica).
+        /// </summary>
+        /// <returns><c>true</c> si el inicio fue exitoso; de lo contrario, <c>false</c>.</returns>
         public bool Start()
         {
             if (_isMonitoring) return true;
 
             try
             {
-                // Initialize capture from selected microphone
+                // Inicializar captura desde el micrófono seleccionado
                 string? deviceId = _settings.Audio.SelectedMicrophone;
                 
                 if (string.IsNullOrEmpty(deviceId))
@@ -61,20 +74,22 @@ namespace ClipStudioDesktop.Services.Audio
                     }
                     catch
                     {
+                        // Fallback al dispositivo por defecto si falla el seleccionado
                         _capture = new WasapiCapture();
                     }
                 }
 
                 if (_capture == null) return false;
 
-                // Create buffered provider for playback
+                // Crear un proveedor con búfer para la reproducción (playback)
+                // Se descartan datos si hay desbordamiento para evitar mucha latencia
                 _bufferedProvider = new BufferedWaveProvider(_capture.WaveFormat)
                 {
                     DiscardOnBufferOverflow = true,
                     BufferDuration = TimeSpan.FromMilliseconds(200)
                 };
 
-                // Setup playback
+                // Configurar salida de audio para escucharse a sí mismo
                 _waveOut = new WaveOutEvent();
                 _waveOut.Init(_bufferedProvider);
 
@@ -94,6 +109,9 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Detiene el monitoreo y libera los recursos de captura y reproducción.
+        /// </summary>
         public void Stop()
         {
             _isMonitoring = false;
@@ -115,16 +133,20 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Callback ejecutado cuando hay nuevos datos de audio disponibles.
+        /// Procesa la señal para aplicar ganancia, noise gate y calcular el nivel para la UI.
+        /// </summary>
         private void OnDataAvailable(object? sender, WaveInEventArgs e)
         {
             if (e.BytesRecorded == 0 || !_isMonitoring || _capture?.WaveFormat == null) return;
 
-            // Get settings
+            // Obtener configuración de audio
             double gainDB = _settings.Audio.MicrophoneGainDB;
             double noiseGateDB = _settings.Audio.NoiseGateDB;
             double gainMultiplier = gainDB != 0 ? Math.Pow(10, gainDB / 20.0) : 1.0;
             
-            // Noise gate threshold (inverted for intuitive behavior, same as recording)
+            // Umbral de noise gate (invertido para comportamiento intuitivo: -60 es silencioso)
             double noiseGateThreshold = 0.0;
             if (noiseGateDB != 0)
             {
@@ -132,20 +154,20 @@ namespace ClipStudioDesktop.Services.Audio
                 noiseGateThreshold = Math.Pow(10, effectiveDB / 20.0);
             }
 
-            // Process audio buffer with gain and noise gate
+            // Búfer para procesar el audio (aplicar efectos)
             byte[] processedBuffer = new byte[e.BytesRecorded];
             Array.Copy(e.Buffer, processedBuffer, e.BytesRecorded);
 
-            // Calculate RAW RMS level (prior to gain) to decide if gate should open
+            // Calcular nivel RMS crudo (antes de ganancia) para decidir si la noise gate se abre
             double rawLevel = CalculateRmsLevel(e.Buffer, e.BytesRecorded, _capture.WaveFormat);
             
-            // Should the gate open? Based on RAW input signal vs threshold
+            // ¿Debe abrirse la noise gate? Basado en si la señal cruda supera el umbral
             bool gateOpen = (noiseGateThreshold == 0) || (rawLevel >= noiseGateThreshold);
             
-            // Calculate final level for display (raw * gain, if passed)
+            // Calcular nivel final para visualización (se aplica ganancia si la noise gate abre)
             double levelAfterGain = rawLevel * gainMultiplier;
 
-            // Process samples based on format
+            // Procesar muestras individuales según formato (Float o PCM 16-bit)
             if (_capture.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat && _capture.WaveFormat.BitsPerSample == 32)
             {
                 for (int i = 0; i < e.BytesRecorded; i += 4)
@@ -153,13 +175,14 @@ namespace ClipStudioDesktop.Services.Audio
                     float sample;
                     if (!gateOpen)
                     {
-                        sample = 0f;
+                        sample = 0f; // Silencio total si la noise gate está cerrada
                     }
                     else
                     {
                         sample = BitConverter.ToSingle(processedBuffer, i);
                         if (gainMultiplier != 1.0)
                             sample = (float)(sample * gainMultiplier);
+                        // Clampear para evitar distorsión digital dura
                         sample = Math.Max(-1f, Math.Min(1f, sample));
                     }
                     byte[] bytes = BitConverter.GetBytes(sample);
@@ -189,20 +212,24 @@ namespace ClipStudioDesktop.Services.Audio
                 }
             }
 
-            // Add processed audio to playback buffer
+            // Añadir audio procesado al búfer de reproducción (para escucharse a sí mismo)
             _bufferedProvider?.AddSamples(processedBuffer, 0, e.BytesRecorded);
 
-            // Update VU meter level (sensitivity x30 for responsive visual)
-            // Note: We show the OUTPUT level (after gain and gate)
+            // Actualizar nivel del VU Meter
+            // Nota: Se muestra el nivel DE SALIDA (después de ganancia y noise gate)
+            // Multiplicador x30 para hacer la visualización más responsiva y visible
             double displayLevel = gateOpen ? levelAfterGain * 30.0 : 0;
             CurrentLevel = Math.Min(1.0, Math.Max(0.0, displayLevel));
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)
         {
-            // Cleanup handled in Stop()
+            // La limpieza principal se maneja en Stop()
         }
 
+        /// <summary>
+        /// Calcula el nivel RMS (Root Mean Square) del buffer de audio.
+        /// </summary>
         private double CalculateRmsLevel(byte[] buffer, int bytesRecorded, WaveFormat? format)
         {
             if (format == null) return 0;

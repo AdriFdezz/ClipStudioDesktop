@@ -10,6 +10,18 @@ using System.Linq;
 
 namespace ClipStudioDesktop.Services.Audio
 {
+    /// <summary>
+    /// Gestiona la grabación del micrófono utilizando WASAPI.
+    /// <para>
+    /// Incluye procesamiento de audio en tiempo real para:
+    /// <list type="bullet">
+    /// <item><description>Selección de dispositivo de entrada.</description></item>
+    /// <item><description>Aplicación de Ganancia (+dB).</description></item>
+    /// <item><description>Puerta de Ruido (Noise Gate) para silenciar el fondo.</description></item>
+    /// </list>
+    /// Los datos se guardan inicialmente en formato RAW y se convierten a WAV asincrónicamente al finalizar.
+    /// </para>
+    /// </summary>
     public class MicrophoneRecorder : IDisposable
     {
         private readonly AppSettings _settings;
@@ -18,19 +30,25 @@ namespace ClipStudioDesktop.Services.Audio
         private bool _isRecording;
         private string? _selectedDeviceId;
         
-        // Disk Buffer
+        // Gestión de Búfer en Disco
         private readonly string _bufferFolder;
         private FileStream? _currentChunkStream;
         private string? _currentChunkPath;
         private readonly List<string> _chunks = new List<string>();
         private readonly object _lock = new object();        
+
         public MicrophoneRecorder(AppSettings settings)
         {
             _settings = settings;
-            // Use a separate folder for microphone buffer
+            // Usar una carpeta separada para el buffer del micrófono
             _bufferFolder = Path.Combine(_settings.Paths.Cache, "mic");
         }
 
+        /// <summary>
+        /// Inicia la grabación del micrófono.
+        /// </summary>
+        /// <param name="outputFilePath">Ruta del archivo de salida (inicialmente contendrá datos RAW).</param>
+        /// <returns><c>true</c> si inició correctamente; <c>false</c> si falló.</returns>
         public bool Start(string outputFilePath)
         {
             if (_isRecording) return true;
@@ -43,7 +61,7 @@ namespace ClipStudioDesktop.Services.Audio
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(outputFilePath)!);
                 
-                // Initialize Capture
+                // Inicializar Captura
                 if (string.IsNullOrEmpty(_selectedDeviceId))
                 {
                     _capture = new WasapiCapture();
@@ -58,7 +76,7 @@ namespace ClipStudioDesktop.Services.Audio
                      }
                      catch
                      {
-                        // Fallback to default
+                        // Fallback al dispositivo por defecto
                         _capture = new WasapiCapture();
                      }
                 }
@@ -67,27 +85,14 @@ namespace ClipStudioDesktop.Services.Audio
 
                 _waveFormat = _capture.WaveFormat;
                 
-                // Direct stream
+                // Abrir stream directo al archivo
                 _currentChunkStream = new FileStream(_currentChunkPath, FileMode.Create, FileAccess.Write, FileShare.Read);
                 
-                // Write WAV Header placeholder (44 bytes) for Mic if we want standard WAV, 
-                // BUT WasapiCapture gives RAW data. 
-                // Since our merge logic expects inputs, maybe simpler to just write raw and let merge handle it if we know format?
-                // Actually, WasapiCapture is float or PCM.
-                // Let's stick to RAW and we already handle raw->wav conversion in Finalize or Merge?
-                // The RecordingService expects this to produce a File. 
-                // Since this class is simple, let's just write raw data 
-                // AND since RecordingService.MergeFiles expects inputs, raw files work if we specify parameters.
-                // However, MergeFiles in RecordingService uses simple "-i file". Inputting raw data with just "-i" often fails without -f s16le etc.
-                // So we SHOULD probably produce a WAV header or convert it later.
-                // Let's write RAW and let the caller or finalizer handle it. 
-                // BUT wait, RecordingService merges "finalAudio" (converted to WAV) for Desktop Audio,
-                // but for Mic it takes `_currentMicFile` directly. 
-                // So `_currentMicFile` MUST be a valid container OR we need to convert it.
-                // I will update this class to just Write RAW, and I will manually add a method "StopAndConvert" or similar?
-                // Actually, `RecordingService` does NOT convert Mic file currently. It passes it to MergeFiles.
-                // MergeFiles uses "-i {mic}". If it's raw, it might fail.
-                // I should replicate the "FinalizeRecording" pattern from AudioRecorder here.
+                // NOTA SOBRE FORMATO:
+                // WasapiCapture entrega datos RAW (Float o PCM) sin encabezado WAV.
+                // Escribimos estos datos crudos directamente al archivo. 
+                // Posteriormente, en FinalizeRecordingAsync, convertimos este RAW a un WAV válido con encabezados
+                // utilizando FFmpeg, para que pueda ser procesado correctamente en la mezcla final.
                 
                 _capture.DataAvailable += OnDataAvailable;
                 _capture.RecordingStopped += OnRecordingStopped;
@@ -103,6 +108,9 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Detiene la grabación y cierra el flujo de archivo.
+        /// </summary>
         public void Stop()
         {
             if (!_isRecording) return;
@@ -118,6 +126,10 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Callback ejecutado cuando hay datos de audio disponibles.
+        /// Aplica los efectos de audio (Ganancia, Noise Gate) antes de escribir al disco.
+        /// </summary>
         private void OnDataAvailable(object? sender, WaveInEventArgs e)
         {
             if (e.BytesRecorded == 0) return;
@@ -125,10 +137,11 @@ namespace ClipStudioDesktop.Services.Audio
             byte[] processedBuffer = e.Buffer;
             int bytesRecorded = e.BytesRecorded;
 
-            // Apply gain and noise gate if configured
+            // Obtener configuración de efectos
             double gainDB = _settings.Audio.MicrophoneGainDB;
             double noiseGateDB = _settings.Audio.NoiseGateDB;
 
+            // Aplicar procesamiento si es necesario
             if (gainDB != 0 || noiseGateDB != 0)
             {
                 processedBuffer = ProcessAudioBuffer(e.Buffer, e.BytesRecorded, gainDB, noiseGateDB);
@@ -143,21 +156,28 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
+        /// <summary>
+        /// Procesa el búfer de audio aplicando Noise Gate y Ganancia.
+        /// </summary>
+        /// <param name="buffer">Datos de audio crudos.</param>
+        /// <param name="bytesRecorded">Cantidad de bytes grabados.</param>
+        /// <param name="gainDB">Ganancia en decibelios.</param>
+        /// <param name="noiseGateDB">Umbral de Noise Gate en decibelios.</param>
+        /// <returns>Búfer de audio procesado.</returns>
         private byte[] ProcessAudioBuffer(byte[] buffer, int bytesRecorded, double gainDB, double noiseGateDB)
         {
-            // Clone buffer to avoid modifying original
+            // Clonar buffer para no modificar el original del evento (buena práctica)
             byte[] result = new byte[bytesRecorded];
             Array.Copy(buffer, result, bytesRecorded);
 
             if (_waveFormat == null) return result;
 
-            // Calculate RMS (root mean square) level of the RAW buffer (before gain)
-            // This ensures we are gating based on the actual input level, so increasing gain
-            // doesn't "break" the noise gate by amplifying noise above the threshold.
+            // Calcular nivel RMS (root mean square) del búfer RAW (antes de ganancia)
+            // Esto asegura que la Noise Gate actúe sobre la señal real de entrada.
             double rawRmsLevel = CalculateRmsLevel(result, bytesRecorded);
 
-            // Noise gate threshold calculation (INVERTED for intuitive behavior):
-            // Slider low = little filtering, slider high = much filtering
+            // Cálculo del umbral de la Noise Gate (INVERTIDO para comportamiento intuitivo):
+            // Slider bajo = poco filtrado (umbral bajo), Slider alto = mucho filtrado (umbral alto)
             double noiseGateThreshold = 0.0;
             if (noiseGateDB != 0)
             {
@@ -165,10 +185,10 @@ namespace ClipStudioDesktop.Services.Audio
                 noiseGateThreshold = Math.Pow(10, effectiveDB / 20.0);
             }
             
-            // If RAW RMS level is below threshold, silence the entire buffer (gate is closed)
+            // Si el nivel RMS está por debajo del umbral, se cierra la Noise Gate (silencio)
             bool gateOpen = (noiseGateThreshold == 0) || (rawRmsLevel >= noiseGateThreshold);
 
-            // Calculate gain multiplier: 10^(dB/20)
+            // Calcular multiplicador de ganancia: 10^(dB/20)
             double gainMultiplier = gainDB != 0 ? Math.Pow(10, gainDB / 20.0) : 1.0;
 
             if (_waveFormat.Encoding == WaveFormatEncoding.IeeeFloat && _waveFormat.BitsPerSample == 32)
@@ -179,17 +199,18 @@ namespace ClipStudioDesktop.Services.Audio
                     
                     if (!gateOpen)
                     {
-                        // Gate closed: silence
+                        // Noise gate cerrada: Silencio total
                         sample = 0f;
                     }
                     else
                     {
-                        // Gate open: pass audio through with gain applied
+                        // Noise gate abierta: Pasar audio aplicando ganancia
                         sample = BitConverter.ToSingle(result, i);
                         if (gainMultiplier != 1.0)
                         {
                             sample = (float)(sample * gainMultiplier);
                         }
+                        // Limitar (Clamp) para evitar desbordamiento
                         sample = Math.Max(-1f, Math.Min(1f, sample));
                     }
                     
@@ -205,12 +226,12 @@ namespace ClipStudioDesktop.Services.Audio
                     
                     if (!gateOpen)
                     {
-                        // Gate closed: silence
+                        // Noise gate cerrada: Silencio
                         sample = 0;
                     }
                     else
                     {
-                        // Gate open: pass audio through with gain applied
+                        // Noise gate abierta: Pasar audio con ganancia
                         sample = BitConverter.ToInt16(result, i);
                         if (gainMultiplier != 1.0)
                         {
@@ -258,11 +279,16 @@ namespace ClipStudioDesktop.Services.Audio
             return Math.Sqrt(sumSquares / sampleCount);
         }
         
-        // This is necessary because the recorded file is RAW. We need valid WAV for FFmpeg auto-detection to work best in MergeFiles.
-        // Or we convert it explicitly.
-        public void FinalizeRecording()
+        /// <summary>
+        /// Finaliza la grabación convirtiendo el archivo RAW temporal a un archivo WAV válido.
+        /// <para>
+        /// Es necesario porque FFmpeg detecta mejor el formato si el archivo tiene encabezados WAV correctos,
+        /// especialmente para la etapa posterior de mezcla (Merge).
+        /// </para>
+        /// </summary>
+        public async Task FinalizeRecordingAsync()
         {
-             // This converts the current RAW file to WAV in-place (or replaces it)
+             // Convierte el archivo RAW actual a WAV in-place (o lo reemplaza)
              if (_currentChunkPath == null || !File.Exists(_currentChunkPath)) return;
              
              try
@@ -270,15 +296,15 @@ namespace ClipStudioDesktop.Services.Audio
                  string rawPath = _currentChunkPath;
                  string wavPath = Path.ChangeExtension(rawPath, ".wav");
                  
-                 // If the file extension was already wav, we still need to fix headers if it was raw.
-                 // In Start(), we used whatever path was given. RecordingService gives "rec_mic_... .wav".
-                 // But we wrote RAW data to it. So it has .wav extension but no header.
-                 // We should rename it to .raw and then convert to .wav
-                 
+                 // Renombrar el archivo actual (que contiene datos RAW pero extensión .wav o similar) a .tmp.raw
+                 // para procesarlo y generar el verdadero WAV.
                  string tempRaw = rawPath + ".tmp.raw";
+                 if (File.Exists(tempRaw)) File.Delete(tempRaw); // Prevenir colisiones
+                 
                  File.Move(rawPath, tempRaw);
                  
-                 ConvertRawToWav(tempRaw, wavPath);
+                 // Convertir RAW -> WAV
+                 await ConvertRawToWavAsync(tempRaw, wavPath);
                  
                  if (File.Exists(wavPath))
                  {
@@ -286,11 +312,14 @@ namespace ClipStudioDesktop.Services.Audio
                  }
                  else
                  {
-                     // Failed? Restore
+                     // Si falló, restaurar el archivo original
                      File.Move(tempRaw, rawPath);
                  }
              }
-             catch { }
+             catch (Exception ex)
+             {
+                 System.Diagnostics.Debug.WriteLine($"Error finalizing mic recording: {ex.Message}");
+             }
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -304,7 +333,10 @@ namespace ClipStudioDesktop.Services.Audio
             }
         }
 
-        private void ConvertRawToWav(string inputFile, string outputFile)
+        /// <summary>
+        /// Utiliza FFmpeg para encapsular los datos PCM crudos en un contenedor WAV.
+        /// </summary>
+        private async Task ConvertRawToWavAsync(string inputFile, string outputFile)
         {
              try
              {
@@ -313,7 +345,7 @@ namespace ClipStudioDesktop.Services.Audio
                  string sampleRate = _waveFormat!.SampleRate.ToString();
                  string channels = _waveFormat!.Channels.ToString();
                  
-                 // Raw to proper WAV
+                 // Comando: Input RAW -> Output WAV (pcm_s16le)
                  string args = $"-y -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \"{inputFile}\" -c:a pcm_s16le \"{outputFile}\"";
                  
                  var p = Process.Start(new ProcessStartInfo
@@ -323,7 +355,11 @@ namespace ClipStudioDesktop.Services.Audio
                      UseShellExecute = false,
                      CreateNoWindow = true
                  });
-                 p?.WaitForExit();
+                 
+                 if (p != null)
+                 {
+                     await p.WaitForExitAsync();
+                 }
              }
              catch { }
         }
@@ -350,8 +386,7 @@ namespace ClipStudioDesktop.Services.Audio
             {
                 if (_currentChunkPath != null && File.Exists(_currentChunkPath))
                 {
-                    // Clean up if needed? 
-                    // Usually RecordingService manages lifecycle of this file now.
+                    // La limpieza puede ser manejada por el RecordingService, pero aquí aseguramos recursos libres.
                 }
             }
             catch { }

@@ -16,6 +16,7 @@
         Deactivated="Window_Deactivated">
     
     <Window.Resources>
+        <!-- Convertidodes para enlace de datos (Data Binding) -->
         <converters:NegateValueConverter x:Key="NegateConverter"/>
         <converters:NegativeFormatConverter x:Key="NegativeFormatConverter"/>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
@@ -25,12 +26,12 @@
     
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- Header -->
-            <RowDefinition Height="*"/>    <!-- Content -->
-            <RowDefinition Height="Auto"/> <!-- Footer -->
+            <RowDefinition Height="Auto"/> <!-- Cabecera (Título y Versión) -->
+            <RowDefinition Height="*"/>    <!-- Contenido Principal (Pestañas) -->
+            <RowDefinition Height="Auto"/> <!-- Pie de Página (Botones de Acción) -->
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!-- Cabecera -->
         <Border Background="{StaticResource SurfaceBrush}" Padding="20" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -46,9 +47,9 @@
             </Grid>
         </Border>
 
-        <!-- Main Content -->
+        <!-- Contenido Principal -->
         <TabControl Grid.Row="1" Margin="15,10,15,15" Background="Transparent" BorderThickness="0">
-            <!-- General Tab -->
+            <!-- Pestaña General -->
             <TabItem Header="GENERAL">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,10,15,0">
@@ -92,7 +93,7 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Audio/Video Tab -->
+            <!-- Pestaña Audio y Video -->
             <TabItem Header="AUDIO Y VIDEO">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,10,15,0">
@@ -199,7 +200,7 @@
                                           PreviewMouseWheel="ComboBox_PreviewMouseWheel"
                                           ToolTip="Selecciona el micrófono a usar para las grabaciones"/>
 
-                                <!-- Probar Micrófono Toggle -->
+                                <!-- Toggle para Probar Micrófono -->
                                 <TextBlock Grid.Row="2" Text="Probar Micrófono" VerticalAlignment="Center" Margin="0,10"
                                            ToolTip="Activa para escucharte y ver el nivel de audio"/>
                                 <CheckBox Grid.Row="2" Grid.Column="1" Content="Escucharme"
@@ -207,7 +208,7 @@
                                           VerticalAlignment="Center" Margin="0,10"
                                           ToolTip="Activa para escuchar tu micrófono y ajustar los niveles"/>
 
-                                <!-- VU Meter - Only visible when monitoring -->
+                                <!-- Medidor VU (Visible solo al monitorear) -->
                                 <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" 
                                       Visibility="{Binding IsMicMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
                                       Height="14" Margin="100,10,0,10" VerticalAlignment="Center">
@@ -287,7 +288,7 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Hotkeys Tab -->
+            <!-- Pestaña de Atajos -->
             <TabItem Header="ATAJOS">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,10,15,0">
@@ -392,7 +393,7 @@
             </ScrollViewer>
         </TabItem>
 
-            <!-- Status Tab -->
+            <!-- Pestaña de Estado -->
             <TabItem>
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
@@ -400,6 +401,7 @@
                         <Ellipse Width="10" Height="10" Fill="Red" Margin="8,0,0,0" VerticalAlignment="Center"
                                  Visibility="{Binding DataContext.IsRecording, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}">
                             <Ellipse.Triggers>
+                                <!-- Animación de parpadeo (Blink) al grabar -->
                                 <EventTrigger RoutedEvent="Loaded">
                                     <BeginStoryboard>
                                         <Storyboard RepeatBehavior="Forever" AutoReverse="True">
@@ -516,7 +518,7 @@
         </TabItem>
         </TabControl>
 
-        <!-- Footer -->
+        <!-- Pie de Página -->
         <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" Padding="20" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Width="180" Height="40" Margin="0,0,10,0">
