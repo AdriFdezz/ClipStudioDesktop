@@ -153,8 +153,9 @@ namespace ClipStudioDesktop.Services.Audio
         /// </summary>
         /// <param name="finalOutputFolder">Carpeta de destino para el archivo final.</param>
         /// <param name="format">Formato deseado (ej. "mp3", "wav").</param>
+        /// <param name="showProgressBar">Si true, muestra ventana de progreso durante la conversión.</param>
         /// <returns>La ruta absoluta del archivo final generado, o null si falló.</returns>
-        public async Task<string?> FinalizeRecordingAsync(string finalOutputFolder, string format)
+        public async Task<string?> FinalizeRecordingAsync(string finalOutputFolder, string format, bool showProgressBar = false)
         {
              if (_currentChunkPath == null || !File.Exists(_currentChunkPath)) return null;
 
@@ -165,7 +166,7 @@ namespace ClipStudioDesktop.Services.Audio
                 string outputFile = Path.Combine(finalOutputFolder, $"recording_audio_{timestamp}.{extension}");
 
                 // Conversión asíncrona usando FFmpeg
-                await ConvertRawToOutputAsync(_currentChunkPath, outputFile, format);
+                await ConvertRawToOutputAsync(_currentChunkPath, outputFile, format, showProgressBar);
                 
                 // Limpiar archivo temporal crudo
                 try { File.Delete(_currentChunkPath); } catch { }
@@ -182,12 +183,20 @@ namespace ClipStudioDesktop.Services.Audio
         /// <summary>
         /// Ejecuta FFmpeg para convertir el audio raw PCM al formato destino.
         /// </summary>
-        private async Task ConvertRawToOutputAsync(string inputFile, string outputFile, string format)
+        /// <param name="inputFile">Archivo raw de entrada.</param>
+        /// <param name="outputFile">Archivo de salida.</param>
+        /// <param name="format">Formato de salida (mp3, wav, flac).</param>
+        /// <param name="showProgressBar">Si true, muestra ventana de progreso.</param>
+        private async Task ConvertRawToOutputAsync(string inputFile, string outputFile, string format, bool showProgressBar = false)
         {
+             Views.ProcessingWindow? progressWindow = null;
+             Process? p = null;
+             bool wasCancelled = false;
+             
              try
              {
                  string ffmpegPath = FFmpegHelper.GetFFmpegPath();
-                 string pcmFormat = GetFFmpegPcmFormat(_waveFormat!); // Detectar formato de bits
+                 string pcmFormat = GetFFmpegPcmFormat(_waveFormat!);
                  string sampleRate = _waveFormat!.SampleRate.ToString();
                  string channels = _waveFormat!.Channels.ToString();
                  
@@ -199,19 +208,53 @@ namespace ClipStudioDesktop.Services.Audio
                          codecArgs = $"-c:a libmp3lame -b:a {_settings.Audio.Bitrate}k";
                          break;
                      case "flac":
-                         codecArgs = "-c:a flac -compression_level 5"; // Compresión sin pérdida
+                         codecArgs = "-c:a flac -compression_level 5";
                          break;
                      default:
-                         codecArgs = "-c:a libmp3lame -b:a 192k"; // Fallback MP3 básico
+                         codecArgs = "-c:a libmp3lame -b:a 192k";
                          break;
                  }
 
-                 // Construir comando FFmpeg: Input RAW -> Output codificado
+                 // Construir comando FFmpeg
                  string args = $"-y -f {pcmFormat} -ar {sampleRate} -ac {channels} -i \"{inputFile}\" {codecArgs} \"{outputFile}\"";
                  
                  System.Diagnostics.Debug.WriteLine($"FFmpeg command: {args}");
-                 
-                 var p = Process.Start(new ProcessStartInfo
+
+                 // Calcular duración estimada del audio basada en tamaño y formato
+                 TimeSpan totalDuration = TimeSpan.Zero;
+                 if (File.Exists(inputFile) && _waveFormat != null)
+                 {
+                     long fileSize = new FileInfo(inputFile).Length;
+                     int bytesPerSecond = _waveFormat.AverageBytesPerSecond;
+                     if (bytesPerSecond > 0)
+                     {
+                         totalDuration = TimeSpan.FromSeconds((double)fileSize / bytesPerSecond);
+                     }
+                 }
+
+                 // Mostrar ventana de progreso si se solicita
+                 if (showProgressBar)
+                 {
+                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                     {
+                         progressWindow = new Views.ProcessingWindow();
+                         progressWindow.CancellationRequested += (s, e) =>
+                         {
+                             wasCancelled = true;
+                             try
+                             {
+                                 if (p != null && !p.HasExited)
+                                 {
+                                     p.Kill();
+                                 }
+                             }
+                             catch { }
+                         };
+                         progressWindow.Show();
+                     });
+                 }
+
+                 var psi = new ProcessStartInfo
                  {
                      FileName = ffmpegPath,
                      Arguments = args,
@@ -219,11 +262,67 @@ namespace ClipStudioDesktop.Services.Audio
                      CreateNoWindow = true,
                      RedirectStandardError = true,
                      RedirectStandardOutput = true
-                 });
-                 
-                 if (p != null)
+                 };
+
+                 p = Process.Start(psi);
+                 if (p == null) return;
+
+                 if (showProgressBar && totalDuration.TotalSeconds > 0)
                  {
-                     // Espera asíncrona para no bloquear UI
+                     // Leer stderr para progreso
+                     var stderrTask = Task.Run(async () =>
+                     {
+                         var reader = p.StandardError;
+                         char[] buffer = new char[256];
+                         string accumulated = "";
+                         
+                         while (!p.HasExited || reader.Peek() >= 0)
+                         {
+                             int read = await reader.ReadAsync(buffer, 0, buffer.Length);
+                             if (read > 0)
+                             {
+                                 accumulated += new string(buffer, 0, read);
+                                 
+                                 // Parsear progreso: time=00:00:04.00
+                                 var timeMatch = System.Text.RegularExpressions.Regex.Match(accumulated, @"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})");
+                                 var speedMatch = System.Text.RegularExpressions.Regex.Match(accumulated, @"speed=\s*([\d.]+)x");
+                                 
+                                 if (timeMatch.Success)
+                                 {
+                                     int hours = int.Parse(timeMatch.Groups[1].Value);
+                                     int mins = int.Parse(timeMatch.Groups[2].Value);
+                                     int secs = int.Parse(timeMatch.Groups[3].Value);
+                                     int centis = int.Parse(timeMatch.Groups[4].Value);
+                                     
+                                     TimeSpan currentTime = new TimeSpan(0, hours, mins, secs, centis * 10);
+                                     double percent = (currentTime.TotalSeconds / totalDuration.TotalSeconds) * 100;
+                                     
+                                     TimeSpan? remaining = null;
+                                     if (speedMatch.Success && double.TryParse(speedMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double speed) && speed > 0)
+                                     {
+                                         double remainingSeconds = (totalDuration.TotalSeconds - currentTime.TotalSeconds) / speed;
+                                         remaining = TimeSpan.FromSeconds(remainingSeconds);
+                                     }
+                                     
+                                     progressWindow?.UpdateProgress(percent, remaining);
+                                 }
+                                 
+                                 if (accumulated.Length > 500)
+                                     accumulated = accumulated.Substring(accumulated.Length - 500);
+                             }
+                             else
+                             {
+                                 await Task.Delay(50);
+                             }
+                         }
+                     });
+
+                     await p.WaitForExitAsync();
+                     await stderrTask;
+                 }
+                 else
+                 {
+                     // Sin progress bar - leer salida normalmente
                      string errors = await p.StandardError.ReadToEndAsync();
                      await p.WaitForExitAsync();
                      
@@ -233,11 +332,41 @@ namespace ClipStudioDesktop.Services.Audio
                          throw new Exception($"FFmpeg falló al convertir audio. Código: {p.ExitCode}");
                      }
                  }
+
+                 if (wasCancelled)
+                 {
+                     try
+                     {
+                         if (File.Exists(outputFile)) File.Delete(outputFile);
+                     }
+                     catch { }
+                     throw new OperationCanceledException("Conversión cancelada por el usuario");
+                 }
+
+                 if (p.ExitCode != 0)
+                 {
+                     throw new Exception($"FFmpeg falló al convertir audio. Código: {p.ExitCode}");
+                 }
+             }
+             catch (OperationCanceledException)
+             {
+                 throw;
              }
              catch (Exception ex)
              {
                  System.Diagnostics.Debug.WriteLine($"Error converting audio: {ex.Message}");
                  throw;
+             }
+             finally
+             {
+                 // Cerrar ventana de progreso
+                 if (progressWindow != null)
+                 {
+                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                     {
+                         progressWindow?.CloseWithoutConfirmation();
+                     });
+                 }
              }
         }
 

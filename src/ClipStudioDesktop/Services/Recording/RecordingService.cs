@@ -301,7 +301,16 @@ namespace ClipStudioDesktop.Services.Recording
                  string? finalAudio = null;
                  if (_currentAudioFile != null && _audioRecorder != null)
                  {
-                     finalAudio = await _audioRecorder.FinalizeRecordingAsync(Path.GetDirectoryName(_currentAudioFile)!, "wav");
+                     // Verificar tamaño del archivo raw ANTES de convertir
+                     long rawAudioSize = 0;
+                     if (File.Exists(_currentAudioFile))
+                     {
+                         rawAudioSize = new FileInfo(_currentAudioFile).Length;
+                     }
+                     
+                     // Si el raw supera 100MB, mostrar progress bar durante la conversión
+                     bool showProgress = rawAudioSize > AudioProgressThresholdBytes;
+                     finalAudio = await _audioRecorder.FinalizeRecordingAsync(Path.GetDirectoryName(_currentAudioFile)!, "wav", showProgress);
                  }
                  
                  // Procesar Micrófono
@@ -441,8 +450,12 @@ namespace ClipStudioDesktop.Services.Recording
             await RunFFmpeg(ffmpeg, args);
         }
 
+        // Umbral de tamaño para mostrar progress bar (100 MB)
+        private const long AudioProgressThresholdBytes = 100 * 1024 * 1024;
+
         /// <summary>
         /// Mezcla dos archivos de audio (Sistema + Micrófono) en uno solo.
+        /// Si el archivo combinado supera los 150MB, muestra ventana de progreso.
         /// </summary>
         private async Task MergeAudioOnly(string output, string audio1, string audio2)
         {
@@ -454,20 +467,46 @@ namespace ClipStudioDesktop.Services.Recording
                           $"-filter_complex \"amix=inputs=2:duration=longest\" " +
                           $"{codecArgs} \"{output}\"";
 
-            await RunFFmpeg(ffmpeg, args);
+            // Calcular tamaño combinado de los archivos raw
+            long combinedSize = 0;
+            if (File.Exists(audio1)) combinedSize += new FileInfo(audio1).Length;
+            if (File.Exists(audio2)) combinedSize += new FileInfo(audio2).Length;
+
+            // Si supera el umbral, mostrar progress bar
+            if (combinedSize > AudioProgressThresholdBytes)
+            {
+                await RunFFmpegWithProgress(ffmpeg, args, audio1, output);
+            }
+            else
+            {
+                await RunFFmpeg(ffmpeg, args);
+            }
         }
 
         /// <summary>
         /// Convierte un archivo de audio a otro formato (ej. RAW a MP3).
+        /// Si el archivo raw supera los 150MB, muestra ventana de progreso.
         /// </summary>
         private async Task ConvertAudio(string output, string input)
         {
-             string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
+            string ffmpeg = ClipStudioDesktop.Helpers.FFmpegHelper.GetFFmpegPath();
             if (string.IsNullOrEmpty(ffmpeg)) return;
 
             string codecArgs = GetAudioCodecArgs(output);
             string args = $"-i \"{input}\" {codecArgs} \"{output}\"";
-            await RunFFmpeg(ffmpeg, args);
+
+            // Verificar tamaño del archivo de entrada
+            long inputSize = File.Exists(input) ? new FileInfo(input).Length : 0;
+
+            // Si supera el umbral, mostrar progress bar
+            if (inputSize > AudioProgressThresholdBytes)
+            {
+                await RunFFmpegWithProgress(ffmpeg, args, input, output);
+            }
+            else
+            {
+                await RunFFmpeg(ffmpeg, args);
+            }
         }
 
         /// <summary>
