@@ -72,10 +72,17 @@ namespace ClipStudioDesktop.Services.Settings
         {
             bool changed = false;
             
-            // Verificar Alt+V (Selección al Portapapeles)
+            // Verificar Alt+C (Selección al Portapapeles)
             if (!settings.Hotkeys.Exists(h => h.Type == "screenshot" && h.Mode == "selection_clipboard"))
             {
                 settings.Hotkeys.Add(new HotKeyConfig { Key = "Alt+C", Type = "screenshot", Mode = "selection_clipboard" });
+                changed = true;
+            }
+
+            // Verificar Alt+D (Modo Dibujo)
+            if (!settings.Hotkeys.Exists(h => h.Type == "drawing"))
+            {
+                settings.Hotkeys.Add(new HotKeyConfig { Key = "Alt+D", Type = "drawing" });
                 changed = true;
             }
 
@@ -118,7 +125,8 @@ namespace ClipStudioDesktop.Services.Settings
                 
                 new() { Key = "Alt+X", Type = "screenshot", Mode = "selection" },
                 new() { Key = "Alt+V", Type = "screenshot", Mode = "fullscreen" },
-                new() { Key = "Alt+C", Type = "screenshot", Mode = "selection_clipboard" }
+                new() { Key = "Alt+C", Type = "screenshot", Mode = "selection_clipboard" },
+                new() { Key = "Alt+D", Type = "drawing" }
             };
 
             SaveSettings();

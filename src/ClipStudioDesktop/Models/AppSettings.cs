@@ -176,6 +176,7 @@ namespace ClipStudioDesktop.Models
                     if (Mode == "selection_clipboard") return "Copiar al Portapapeles (Selección)";
                     return "Captura de Pantalla";
                 }
+                if (Type == "drawing") return "Modo Dibujo";
                 return Type;
             }
         }

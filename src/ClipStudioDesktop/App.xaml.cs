@@ -369,6 +369,10 @@ namespace ClipStudioDesktop
                                     PlayNotificationSound();
                                 }
                             }
+                            else if (hotkey.Type == "drawing")
+                            {
+                                OpenDrawingMode();
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -442,6 +446,66 @@ namespace ClipStudioDesktop
         }
 
         /// <summary>
+        /// Abre el Modo Dibujo.
+        /// Captura la pantalla actual y la muestra en una ventana congelada con borde animado.
+        /// </summary>
+        private void OpenDrawingMode()
+        {
+            try
+            {
+                // Capturar la pantalla principal
+                var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (screen == null) return;
+
+                var bounds = screen.Bounds;
+                using (var bitmap = new System.Drawing.Bitmap(bounds.Width, bounds.Height))
+                {
+                    using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                    {
+                        graphics.CopyFromScreen(bounds.Location, System.Drawing.Point.Empty, bounds.Size);
+                    }
+
+                    // Convertir a BitmapSource para WPF
+                    var hBitmap = bitmap.GetHbitmap();
+                    try
+                    {
+                        var bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+                            hBitmap,
+                            IntPtr.Zero,
+                            System.Windows.Int32Rect.Empty,
+                            System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                        bitmapSource.Freeze();
+
+                        // Mostrar la ventana de dibujo con la carpeta de capturas configurada
+                        string screenshotFolder = _settingsService.CurrentSettings.Paths.Screenshots;
+                        var drawingWindow = new Views.DrawingWindow(bitmapSource, screenshotFolder)
+                        {
+                            Left = bounds.X,
+                            Top = bounds.Y,
+                            Width = bounds.Width,
+                            Height = bounds.Height
+                        };
+                        
+
+                        
+                        drawingWindow.ShowDialog();
+                    }
+                    finally
+                    {
+                        DeleteObject(hBitmap);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App.xaml.cs] Error al abrir modo dibujo: {ex.Message}");
+            }
+        }
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
+
+        /// <summary>
         /// Reproduce un sonido de notificación si está habilitado en la configuración.
         /// </summary>
         private void PlayNotificationSound()
@@ -475,7 +539,9 @@ namespace ClipStudioDesktop
             }
         }
 
-        #region API Shell para transición suave en Explorador
+        #region API Shell y User32 para transición suave en Explorador.
+        // Importaciones necesarias para interactuar con el Shell de Windows y la gestión de ventanas.
+
         [DllImport("shell32.dll", ExactSpelling = true)]
         private static extern int SHOpenFolderAndSelectItems(IntPtr pidlFolder, uint cidl, IntPtr apidl, uint dwFlags);
 
@@ -485,12 +551,51 @@ namespace ClipStudioDesktop
         [DllImport("shell32.dll")]
         private static extern void ILFree(IntPtr pidl);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        /// <summary>
+        /// Constante para restaruar una ventana minimizada (SW_RESTORE).
+        /// </summary>
+        private const int SW_RESTORE = 9;
+
         /// <summary>
         /// Abre el explorador de archivos con el archivo especificado seleccionado.
+        /// Si la carpeta ya está abierta, intenta reutilizar la ventana existente,
+        /// restaurándola si está minimizada y trayéndola al frente.
         /// </summary>
-        private void ShowFileInExplorer(string filePath)
+        /// <param name="filePath">Ruta absoluta del archivo a mostrar y seleccionar.</param>
+        public void ShowFileInExplorer(string filePath)
         {
             if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath)) return;
+
+            // Intentar restaurar ventana existente si está minimizada
+            try
+            {
+                string folderPath = System.IO.Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(folderPath))
+                {
+                    string folderName = System.IO.Path.GetFileName(folderPath);
+                    
+                    // Buscar ventana de explorador por título (nombre de carpeta)
+                    // Clase "CabinetWClass" es la estándar de Explorer
+                    IntPtr hWnd = FindWindow("CabinetWClass", folderName);
+                    if (hWnd != IntPtr.Zero)
+                    {
+                        ShowWindow(hWnd, SW_RESTORE);
+                        SetForegroundWindow(hWnd);
+                    }
+                }
+            }
+            catch { }
 
             IntPtr pidl = ILCreateFromPath(filePath);
             if (pidl != IntPtr.Zero)
