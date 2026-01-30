@@ -17,6 +17,19 @@ namespace ClipStudioDesktop.Models
         public ScreenshotSettings Screenshot { get; set; } = new();
         public List<HotKeyConfig> Hotkeys { get; set; } = new();
         public BufferSettings Buffer { get; set; } = new();
+        public MonitorSettings Monitor { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Configuración global de monitor preferido.
+    /// </summary>
+    public class MonitorSettings
+    {
+        /// <summary>Índice del monitor seleccionado (0, 1, etc.).</summary>
+        public int SelectedMonitorIndex { get; set; } = 0;
+        
+        /// <summary>Nombre del dispositivo (ej. \\.\DISPLAY1) para validar persistencia.</summary>
+        public string SelectedMonitorDeviceName { get; set; } = "";
     }
 
     /// <summary>

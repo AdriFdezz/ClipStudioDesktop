@@ -1,30 +1,58 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Configuración del Proyecto y Framework -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    
+    <!-- Habilitar soporte para WPF y Windows Forms -->
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    
+    <!-- Icono de la aplicación -->
     <ApplicationIcon>assets\Clip_Studio_Desktop_ico.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- Dependencias NuGet -->
   <ItemGroup>
+    <!-- Notificaciones de bandeja del sistema (System Tray) -->
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
+    
+    <!-- Manejo de Audio (Captura y procesamiento) -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+    
+    <!-- Procesamiento de Video e Imágenes (OpenCV) -->
     <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
+    
+    <!-- Gráficos y primitivas de dibujo (GDI+) -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    
+    <!-- Grabación de Video en formato AVI -->
     <PackageReference Include="SharpAvi" Version="3.0.0" />
+    
+    <!-- Acceso a WMI (Información de hardware/monitores) -->
+    <PackageReference Include="System.Management" Version="10.0.2" />
   </ItemGroup>
 
+  <!-- Recursos y Archivos Adicionales -->
   <ItemGroup>
+    <!-- Sonido de notificación (se copia al directorio de salida si es más nuevo) -->
     <None Update="assets\Notification_sound.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    
+    <!-- Icono incrustado como recurso y copiado como archivo -->
     <Resource Include="assets\Clip_Studio_Desktop_ico.ico" />
     <None Update="assets\Clip_Studio_Desktop_ico.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    
+    <!-- Ejecutable de FFmpeg (enlace simbólico o copia desde ruta relativa) -->
+    <None Include="..\..\ffmpeg.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>ffmpeg.exe</Link>
     </None>
   </ItemGroup>
 

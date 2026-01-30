@@ -61,6 +61,8 @@
                             </StackPanel>
                         </GroupBox>
 
+
+
                         <GroupBox Header="Carpetas de Almacenamiento">
                             <StackPanel>
                                 <Grid Margin="0,5">
@@ -249,6 +251,31 @@
                             </Grid>
                         </GroupBox>
 
+                        <GroupBox Header="Configuración de Monitor">
+                            <StackPanel>
+                                <TextBlock Text="Selecciona el monitor para Capturas, Grabación y Dibujo:" 
+                                           TextWrapping="Wrap" Margin="0,0,0,5" Foreground="White"/>
+                                
+                                <ComboBox ItemsSource="{Binding AvailableMonitors}" 
+                                          SelectedValue="{Binding Settings.Monitor.SelectedMonitorIndex}" 
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="Index"
+                                          Margin="0,5,0,20"
+                                          PreviewMouseWheel="ComboBox_PreviewMouseWheel"
+                                          ToolTip="El monitor seleccionado será usado para todas las funciones."/>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Haz clic para identificar las pantallas" 
+                                               VerticalAlignment="Center" Foreground="White"
+                                               TextWrapping="Wrap" Margin="0,0,20,0"/>
+
+                                    <Button Content="Identificar" 
+                                            Command="{Binding IdentifyMonitorsCommand}"
+                                            MinWidth="100"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="Configuración de Imagen">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -316,6 +343,9 @@
                                         <Setter Property="Background" Value="#007ACC"/>
                                         <Setter Property="Foreground" Value="White"/>
                                         <Setter Property="Padding" Value="6"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="Height" Value="30"/>
                                         <Setter Property="BorderThickness" Value="0"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
@@ -341,6 +371,23 @@
 
                     <DataGrid x:Name="HotkeysGrid" ItemsSource="{Binding Settings.Hotkeys}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Single" SelectionUnit="Cell" BorderThickness="1" BorderBrush="{StaticResource BorderBrush}"
                               VerticalAlignment="Top">
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Foreground" Value="#007ACC"/>
+                                <Setter Property="Background" Value="#1E1E1E"/>
+                                <Setter Property="Padding" Value="10,5"/>
+                                <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                <Setter Property="BorderBrush" Value="#3E3E42"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                <Setter Property="FontSize" Value="14"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Foreground" Value="#1C97EA"/> 
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
                                 <Setter Property="Background" Value="Transparent"/>
@@ -367,8 +414,20 @@
                             </Style>
                         </DataGrid.CellStyle>
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Acción" Binding="{Binding Description}" Width="250" IsReadOnly="True" FontWeight="SemiBold"/>
-                            <DataGridTemplateColumn Header="Atajo de Teclado" Width="*" IsReadOnly="False">
+                            <DataGridTextColumn Binding="{Binding Description}" Width="250" IsReadOnly="True" FontWeight="SemiBold">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="Acción" Foreground="#007ACC" FontWeight="Bold" FontSize="14"/>
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                            </DataGridTextColumn>
+                            
+                            <DataGridTemplateColumn Width="*" IsReadOnly="False">
+                                <DataGridTemplateColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="Atajo de Teclado" Foreground="#007ACC" FontWeight="Bold" FontSize="14"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.HeaderTemplate>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding Key}" VerticalAlignment="Center" Padding="5,0"/>
@@ -427,8 +486,8 @@
                                         <Border Background="#102E10" CornerRadius="4" HorizontalAlignment="Left" Height="28" Padding="6,0" Margin="0,0,8,0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding StatusText}" Foreground="#4CAF50" FontWeight="Bold" VerticalAlignment="Center"/>
                                         </Border>
-                                        <Button Content="{Binding VideoButtonText}" Command="{Binding ToggleVideoCommand}" IsEnabled="{Binding IsVideoCaptureEnabled}" Width="110" Height="28" Margin="0,0,8,0"/>
-                                        <Button Content="{Binding AudioButtonText}" Command="{Binding ToggleAudioCommand}" IsEnabled="{Binding IsAudioCaptureEnabled}" Width="110" Height="28" Margin="0,0,8,0"/>
+                                        <Button Content="{Binding VideoButtonText}" Command="{Binding ToggleVideoCommand}" IsEnabled="{Binding IsVideoCaptureEnabled}" Width="110" Margin="0,0,8,0"/>
+                                        <Button Content="{Binding AudioButtonText}" Command="{Binding ToggleAudioCommand}" IsEnabled="{Binding IsAudioCaptureEnabled}" Width="110" Margin="0,0,8,0"/>
                                     </StackPanel>
                                 </Grid>
                                 
@@ -459,7 +518,7 @@
                             </StackPanel>
                     </GroupBox>
 
-                    <GroupBox Header="Estadísticas Totales">
+                    <GroupBox Header="Espacio en Disco Usado">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -521,13 +580,16 @@
         <!-- Pie de Página -->
         <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" Padding="20" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Width="180" Height="40" Margin="0,0,10,0">
+                <Button Content="Restaurar Valores" Command="{Binding ResetCommand}" Width="180" Margin="0,0,10,0">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="#2D2D32"/>
                             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
                             <Setter Property="BorderThickness" Value="1"/>
                             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            <Setter Property="FontSize" Value="12"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="Height" Value="30"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
@@ -550,7 +612,7 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Width="180" Height="40"/>
+                <Button Content="Guardar Configuración" Command="{Binding SaveCommand}" Width="180"/>
             </StackPanel>
         </Border>
     </Grid>

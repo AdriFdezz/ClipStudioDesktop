@@ -453,11 +453,19 @@ namespace ClipStudioDesktop
         {
             try
             {
-                // Capturar la pantalla principal
-                var screen = System.Windows.Forms.Screen.PrimaryScreen;
-                if (screen == null) return;
-
-                var bounds = screen.Bounds;
+                // Capturar la pantalla seleccionada
+                var screens = System.Windows.Forms.Screen.AllScreens;
+                int monitorIdx = _settingsService.CurrentSettings.Monitor.SelectedMonitorIndex;
+                
+                System.Drawing.Rectangle bounds;
+                if (monitorIdx >= 0 && monitorIdx < screens.Length)
+                {
+                    bounds = screens[monitorIdx].Bounds;
+                }
+                else
+                {
+                    bounds = System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? new System.Drawing.Rectangle(0,0,1920,1080);
+                }
                 using (var bitmap = new System.Drawing.Bitmap(bounds.Width, bounds.Height))
                 {
                     using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
@@ -580,10 +588,11 @@ namespace ClipStudioDesktop
             // Intentar restaurar ventana existente si está minimizada
             try
             {
-                string folderPath = System.IO.Path.GetDirectoryName(filePath);
+                string? folderPath = System.IO.Path.GetDirectoryName(filePath);
                 if (!string.IsNullOrEmpty(folderPath))
                 {
-                    string folderName = System.IO.Path.GetFileName(folderPath);
+                    string? folderName = System.IO.Path.GetFileName(folderPath);
+                    if (folderName == null) return;
                     
                     // Buscar ventana de explorador por título (nombre de carpeta)
                     // Clase "CabinetWClass" es la estándar de Explorer

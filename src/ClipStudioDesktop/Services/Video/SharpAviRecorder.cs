@@ -43,9 +43,10 @@ namespace ClipStudioDesktop.Services.Video
         /// </summary>
         /// <param name="outputPath">Ruta completa del archivo .avi de salida.</param>
         /// <param name="fps">Frames por segundo deseados.</param>
+        /// <param name="bounds">Rectángulo de la pantalla a capturar.</param>
         /// <param name="quality">Calidad de compresión JPEG (10-100).</param>
         /// <param name="recordAudio">Si es true, inicializa la captura de audio del sistema (WASAPI).</param>
-        public void StartRecording(string outputPath, int fps, int quality = 85, bool recordAudio = true)
+        public void StartRecording(string outputPath, int fps, Rectangle bounds, int quality = 85, bool recordAudio = true)
         {
             if (_isRecording) return;
             
@@ -57,14 +58,15 @@ namespace ClipStudioDesktop.Services.Video
             if (_quality < 10) _quality = 10;
             if (_quality > 100) _quality = 100;
             
-            var screen = Screen.PrimaryScreen;
-            if (screen == null) throw new Exception("No display detected.");
-            _width = screen.Bounds.Width;
-            _height = screen.Bounds.Height;
+            _width = bounds.Width;
+            _height = bounds.Height;
             
-            // Ajustar resoluciones impares (SharpAvi/Codecs suelen preferir dimensiones pares)
+            // Ajustar resoluciones impares
             if (_width % 2 != 0) _width--;
             if (_height % 2 != 0) _height--;
+            
+            // Validar dimensiones mínimas
+            if (_width <= 0 || _height <= 0) throw new Exception("Dimensiones de captura inválidas.");
 
             try
             {
@@ -75,15 +77,14 @@ namespace ClipStudioDesktop.Services.Video
                     EmitIndex1 = true
                 };
 
-                // Agregar Stream de Video (Motion JPEG es rápido y de buena calidad para grabación temporal)
-                // Se usa calidad alta para minimizar artefactos antes de la conversión final a MP4
+                // Agregar Stream de Video
                 _videoStream = _writer.AddVideoStream();
                 _videoStream.Width = _width;
                 _videoStream.Height = _height;
                 _videoStream.Codec = new SharpAvi.FourCC("MJPG"); 
                 _videoStream.BitsPerPixel = BitsPerPixel.Bpp24;
 
-                // Configurar Audio si se solicita
+                // Configurar Audio
                 if (recordAudio)
                 {
                     InitializeAudioCapture();
@@ -95,16 +96,16 @@ namespace ClipStudioDesktop.Services.Video
                 // Iniciar Audio Capture
                 _audioCapture?.StartRecording();
 
-                // Iniciar Hilo de Captura de Video
-                _videoThread = new Thread(VideoLoop)
+                // Iniciar Hilo de Captura de Video con los bounds específicos
+                _videoThread = new Thread(() => VideoLoop(bounds))
                 {
                     IsBackground = true,
-                    Priority = ThreadPriority.Highest, // Crítico para el timing
+                    Priority = ThreadPriority.Highest,
                     Name = "SharpAviVideoCaptureThread"
                 };
                 _videoThread.Start();
                 
-                Debug.WriteLine($"[SharpAviRecorder] Started recording to {_outputPath} at {_frameRate}fps");
+                Debug.WriteLine($"[SharpAviRecorder] Started recording to {_outputPath} at {_frameRate}fps. Bounds: {bounds}");
             }
             catch (Exception ex)
             {
@@ -204,7 +205,10 @@ namespace ClipStudioDesktop.Services.Video
         /// Intenta mantener una tasa de frames constante (CFR) ajustando los tiempos de espera
         /// y duplicando frames si el sistema se retrasa.
         /// </summary>
-        private void VideoLoop()
+        /// <summary>
+        /// Bucle principal de captura de video. Se ejecuta en un hilo de alta prioridad.
+        /// </summary>
+        private void VideoLoop(Rectangle bounds)
         {
             using var bitmap = new Bitmap(_width, _height);
             using var graphics = Graphics.FromImage(bitmap);
@@ -219,7 +223,6 @@ namespace ClipStudioDesktop.Services.Video
             using var ms = new MemoryStream();
 
             // LÓGICA DE SINCRONIZACIÓN (Constant Frame Rate)
-            // Debemos escribir exactamente 'fps' frames por cada segundo de tiempo real.
             
             double msPerFrame = 1000.0 / _frameRate;
             long startTime = Stopwatch.GetTimestamp();
@@ -246,11 +249,8 @@ namespace ClipStudioDesktop.Services.Video
                         }
                     }
                     
-                    // 3. Capturar UN frame
-                    // (Incluso si vamos muy atrasados, capturamos una vez y escribimos N veces para alcanzar. 
-                    // Esto evita que GDI+ se convierta en cuello de botella)
-                    
-                    graphics.CopyFromScreen(0, 0, 0, 0, new Size(_width, _height), CopyPixelOperation.SourceCopy);
+                    // 3. Capturar UN frame desde las coordenadas del monitor seleccionado
+                    graphics.CopyFromScreen(bounds.X, bounds.Y, 0, 0, new Size(_width, _height), CopyPixelOperation.SourceCopy);
                     
                     // Comprimir a MJPEG
                     ms.SetLength(0);

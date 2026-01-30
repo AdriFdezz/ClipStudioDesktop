@@ -30,7 +30,7 @@ namespace ClipStudioDesktop.Services.Screenshot
         }
 
         /// <summary>
-        /// Captura la pantalla completa basándose en la configuración actual (monitor específico, todos, o primario).
+        /// Captura la pantalla completa basándose en la configuración actual (monitor específico o primario).
         /// </summary>
         public async Task CaptureFullScreenAsync()
         {
@@ -40,19 +40,26 @@ namespace ClipStudioDesktop.Services.Screenshot
                 int x = 0, y = 0, width = 0, height = 0;
 
                 // Determinar límites de la captura según configuración
-                if (settings.Monitor == "all")
+                // Prioridad: Configuración Global de Monitor (salvo que se pida "all" explícitamente en Screenshot settings si existiera esa opción avanzada)
+                
+                int globalMonitorIdx = _settingsService.CurrentSettings.Monitor.SelectedMonitorIndex;
+                var screens = System.Windows.Forms.Screen.AllScreens;
+
+                if (settings.Monitor == "all") 
                 {
+                    // "all" sigue funcionando si el usuario lo forzó en config manual, 
+                    // pero por defecto usaremos el monitor seleccionado global.
                     x = (int)SystemParameters.VirtualScreenLeft;
                     y = (int)SystemParameters.VirtualScreenTop;
                     width = (int)SystemParameters.VirtualScreenWidth;
                     height = (int)SystemParameters.VirtualScreenHeight;
                 }
-                else if (settings.Monitor == "specific")
+                else
                 {
-                    var screens = System.Windows.Forms.Screen.AllScreens;
-                    if (settings.MonitorIndex >= 0 && settings.MonitorIndex < screens.Length)
+                    // Usar Monitor Seleccionado Globalmente
+                    if (globalMonitorIdx >= 0 && globalMonitorIdx < screens.Length)
                     {
-                        var screen = screens[settings.MonitorIndex];
+                        var screen = screens[globalMonitorIdx];
                         x = screen.Bounds.X;
                         y = screen.Bounds.Y;
                         width = screen.Bounds.Width;
@@ -60,7 +67,7 @@ namespace ClipStudioDesktop.Services.Screenshot
                     }
                     else
                     {
-                        // Fallback al primario si el índice no es válido
+                        // Fallback al primario
                         var screen = System.Windows.Forms.Screen.PrimaryScreen;
                         if (screen != null)
                         {
@@ -69,17 +76,6 @@ namespace ClipStudioDesktop.Services.Screenshot
                             width = screen.Bounds.Width;
                             height = screen.Bounds.Height;
                         }
-                    }
-                }
-                else // "primary" o por defecto
-                {
-                    var screen = System.Windows.Forms.Screen.PrimaryScreen;
-                    if (screen != null)
-                    {
-                        x = screen.Bounds.X;
-                        y = screen.Bounds.Y;
-                        width = screen.Bounds.Width;
-                        height = screen.Bounds.Height;
                     }
                 }
 

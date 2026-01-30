@@ -137,8 +137,22 @@ namespace ClipStudioDesktop.Services.Recording
                         quality += (int)(ratio * 30); // Max 80
                     }
                     
+                    // Determinar pantalla de grabación según configuración global
+                    var screens = System.Windows.Forms.Screen.AllScreens;
+                    int monitorIdx = _settingsService.CurrentSettings.Monitor.SelectedMonitorIndex;
+                    
+                    System.Drawing.Rectangle captureBounds;
+                    if (monitorIdx >= 0 && monitorIdx < screens.Length)
+                    {
+                        captureBounds = screens[monitorIdx].Bounds;
+                    }
+                    else
+                    {
+                        captureBounds = System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? new System.Drawing.Rectangle(0,0,1920,1080);
+                    }
+
                     // Iniciar grabador nativo (Video + Audio Desktop)
-                    _nativeRecorder?.StartRecording(tempAvi, fps, quality, recordAudio: true);
+                    _nativeRecorder?.StartRecording(tempAvi, fps, captureBounds, quality, recordAudio: true);
                 }
                 else
                 {
