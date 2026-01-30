@@ -43,7 +43,7 @@
                     <TextBlock Text="Clip Studio Desktop" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
                     <TextBlock Text="Configuración" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextSecondaryBrush}" Margin="10,0,0,0"/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="v1.0.0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBlock Grid.Column="1" Text="v1.1.0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
             </Grid>
         </Border>
 
