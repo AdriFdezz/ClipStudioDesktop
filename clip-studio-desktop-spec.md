@@ -399,6 +399,80 @@ flowchart LR
     C --> H
 ```
 
+### 7.4 Modo Dibujo
+
+El modo dibujo no es simplemente una ventana transparente; es un sistema de capas que gestiona el ciclo de vida de una captura.
+
+**Arquitectura de la Ventana (`DrawingWindow`)**:
+1.  **Capa 0 (Fondo)**: `Image` que contiene el Bitmap estático de la captura inicial.
+2.  **Capa 1 (Canvas)**: Superficie transparente donde se agregan los `UIElement` (Path, Line, Polyline).
+3.  **Capa 2 (UI)**: Controles de herramientas y bordes, que se ocultan programáticamente al guardar.
+
+**Patrón de Diseño: Command (Estricto)**
+Para implementar Undo/Redo robusto, cada trazo no es solo un evento visual, sino una transacción encapsulada.
+
+```csharp
+private interface IDrawingAction {
+    void Undo(Canvas canvas, List<List<UIElement>> groups);
+    void Redo(Canvas canvas, List<List<UIElement>> groups);
+}
+```
+
+- **DrawAction**: Almacena referencia a los elementos creados (ej: Cabeza y cuerpo de flecha agrupados).
+- **EraseAction**: Almacena referencia a los elementos eliminados *y su posición original en el grupo*.
+- **Pila de Ejecución**: `Stack<IDrawingAction> _undoStack`. Al ejecutar una nueva acción, se limpia el `_redoStack`.
+
+**Algoritmo de Flechas Dinámicas**:
+Las flechas no son primitivas de WPF. Se generan matemáticamente en el evento `MouseUp`:
+1.  Se calcula el ángulo de la línea base: `atan2(dy, dx)`.
+2.  Se retrocede el punto final de la línea (`X2, Y2`) una distancia igual a `headLength` para que la punta no se superponga.
+3.  Se generan 3 puntos para un polígono triangular rotado según el ángulo calculado.
+4.  El cuerpo (Line) y la cabeza (Polygon) se agrupan en una `List<UIElement>` única para que el borrador los trate como una sola entidad.
+
+**Estrategia de Captura Final (GDI+ vs WPF)**:
+No se usa `RenderTargetBitmap` de WPF para guardar porque puede tener problemas con DPIs mixtos. Se usa una estrategia híbrida:
+1.  **Ocultación**: Se colapsa la visibilidad de `Toolbar`, `Borders` e indicadores.
+2.  **Espera de Renderizado**: Se fuerza un `UpdateLayout()` y se espera 200ms (Timer) para asegurar que el motor de composición de Windows ha eliminado los píxeles de la UI.
+3.  **Captura GDI+**:
+    ```csharp
+    graphics.CopyFromScreen(windowLeft, windowTop, ...);
+    ```
+    Esto captura los píxeles crudos que está viendo el usuario (Fondo + Canvas WPF + Transparencias aplicadas), garantizando fidelidad 1:1.
+
+### 7.5 Gestión de Monitores (Interoperabilidad Avanzada)
+
+El desafío en Windows es que `.NET` (`Screen`) y el hardware (`WMI`) usan identificadores diferentes. El sistema implementa un puente de correlación.
+
+**Flujo de Descubrimiento de Hardware**:
+
+1.  **Nivel 1: Geometría Lógica (Windows Forms)**:
+    Se usa `Screen.AllScreens` para obtener las coordenadas `Bounds` y la propiedad `Primary`. Esto es rápido pero solo da nombres genéricos (ej: `\\.\DISPLAY1`).
+
+2.  **Nivel 2: Enlace PnP (User32)**:
+    Mediante `EnumDisplayDevices` (P/Invoke), se itera sobre los adaptadores para encontrar el `DeviceID` real del hardware (ej: `MONITOR\BNQ78C8\{GUID}`).
+    *Clave*: Este ID contiene el "Hardware ID" (ej: `BNQ78C8`) necesario para consultar al driver.
+
+3.  **Nivel 3: Interrogación WMI (System.Management)**:
+    Se ejecuta una consulta WMI de bajo nivel para obtener el nombre comercial ("Marketing Name") que el monitor reporta vía EDID.
+
+    ```sql
+    SELECT * FROM WmiMonitorID
+    ```
+
+    - Se itera sobre los objetos devueltos buscando aquel cuyo `InstanceName` contenga el Hardware ID obtenido en el Nivel 2.
+    - Se decodifica la propiedad `UserFriendlyName` (array de `UInt16`) a string ASCII, limpiando caracteres nulos.
+    - **Resultado**: El usuario ve "Pantalla 1 - BenQ EX2780Q" en lugar de "Pantalla 1 - Generic PnP Monitor".
+
+**Ventana de Identificación (`IdentifyWindow`)**:
+
+- **Instanciación Múltiple**: Se crea una instancia de ventana por cada monitor físico detectado.
+- **Posicionamiento Absoluto DPI-Aware**:
+  - WMI/Forms reportan píxeles físicos si la app no es DPI Audited.
+  - La ventana calcula el factor de escala DPI actual (`PresentationSource.CompositionTarget.TransformToDevice`) y divide las coordenadas `Top/Left` para asegurar que la ventana XAML (unidades lógicas) se alinee exactamente con el monitor físico.
+- **Ciclo de Vida**: 
+  - `Show()` -> Animación CSS-like en XAML -> `Task.Delay(5500)` -> `Close()`.
+  - La ventana es `ClickThrough` (no captura input) para no interrumpir al usuario.
+
 ---
 
 ## 8. Sistema de Servicios

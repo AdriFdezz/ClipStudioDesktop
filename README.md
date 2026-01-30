@@ -25,6 +25,7 @@
 - 🎵 **Grabar audio** del sistema y/o micrófono
 - 📸 **Tomar capturas** de pantalla completa o de una región seleccionada
 - 📋 **Copiar al portapapeles** capturas instantáneas
+- 🎨 **Modo Dibujo** para anotar y resaltar tus capturas
 
 Todo esto sin interrumpir tu flujo de trabajo. La aplicación vive en la **bandeja del sistema** (junto al reloj) y responde a atajos globales que funcionan incluso cuando otras aplicaciones tienen el foco.
 
@@ -48,11 +49,21 @@ Todo esto sin interrumpir tu flujo de trabajo. La aplicación vive en la **bande
 - **Selección de región**: Dibuja un rectángulo para capturar solo lo que necesitas
 - **Al portapapeles**: Pega directamente en cualquier aplicación
 
+### 🎨 Modo Dibujo
+- **Lápiz**: Dibujo libre con trazo suave
+- **Flecha**: Ideal para señalar elementos específicos
+- **Círculo**: Enmarca áreas de interés
+- **Rectángulo**: Resalta secciones de forma clara
+- **Línea**: Trazos rectos para mayor orden
+- **Borrador**: Haz clic sobre cualquier trazo para eliminarlo individualmente
+- **Guardar**: Guarda la captura con los dibujos aplicados
+
 ### ⚙️ Configuración Flexible
 - Elige la carpeta donde guardar tus clips
 - Personaliza todos los atajos de teclado
 - Configura formatos y calidad de salida
 - Activa/desactiva el inicio automático con Windows
+- Selecciona el monitor a capturar para algunas funciones del programa
 
 ---
 
@@ -77,6 +88,69 @@ Puedes ajustar este límite desde la pestaña **Audio y Video**:
 - **Ilimitado**: Coloca `0` para desactivar el límite y grabar hasta llenar el disco
 
 > 💡 **Tip**: Usa el valor `0` (Ilimitado) si planeas hacer grabaciones muy largas y tienes espacio de sobra.
+
+---
+
+## 🎨 Modo Dibujo
+
+El **Modo Dibujo** se activa automáticamente cuando utilizas el atajo de (`Alt + D`). Te permite dibujar y resaltar partes importantes de tu pantalla con formas, líneas, flechas incluso dibujar de forma libre con la posibilidad de guardar la imagen con los dibujos aplicados.
+
+### 🛠️ Herramientas Disponibles
+
+En la barra de herramientas flotante (que puedes arrastrar a cualquier parte de la pantalla) encontrarás:
+
+- ✏️ **Lápiz**: Dibujo libre con trazo suave.
+- ➡️ **Flecha**: Ideal para señalar elementos específicos.
+- ⭕ **Círculo**: Enmarca áreas de interés.
+- ⬜ **Rectángulo**: Resalta secciones de forma clara.
+- 📏 **Línea**: Trazos rectos para mayor orden.
+- 🧽 **Borrador**: Haz clic sobre cualquier trazo para eliminarlo individualmente.
+
+### 🌈 Personalización
+
+- **Color**: Haz clic en el círculo de color para abrir el selector. Desliza sobre la barra cromática para elegir el tono perfecto.
+- **Tamaño del Trazo**: Utiliza los botones `+` y `-` para ajustar el grosor de tus dibujos (de 1px a 20px).
+
+### ⌨️ Atajos Rápidos del Modo Dibujo
+
+Mientras estás dibujando, puedes usar estos comandos:
+
+| Atajo | Acción |
+|-------|--------|
+| `Ctrl + Z` | Deshacer el último cambio |
+| `Ctrl + Y` | Rehacer el cambio deshecho |
+| `ESC` | Salir del modo dibujo sin guardar |
+| **Clic Icono Cámara** | Guardar captura con los dibujos aplicados |
+
+> 💡 **Tip**: El borrador es inteligente; si haces clic cerca de un objeto (como una flecha o un círculo), este se eliminará por completo.
+
+---
+
+## 🖥️ Gestión de Monitores
+
+Clip Studio Desktop es totalmente compatible con configuraciones multimonitor. Puedes elegir exactamente en qué pantalla quieres trabajar.
+
+### Cómo elegir un monitor
+
+1. Abre la **Configuración** (doble clic en el icono de la bandeja).
+2. Ve a la pestaña **Audio y Video**.
+3. En la sección **Configuración de Monitor**, abre el desplegable para ver la lista de pantallas detectadas.
+
+> 💡 **Nombres Reales**: A diferencia de otras aplicaciones, Clip Studio intenta obtener el nombre comercial de tu monitor (ej: "BenQ EX2780Q") en lugar de un genérico "Monitor PnP".
+
+### Identificación de Pantallas
+
+Si no estás seguro de cuál es el "Monitor 1" o el "Monitor 2":
+1. Haz clic en el botón **Identificar** en la configuración.
+2. Aparecerá un número gigante en cada una de tus pantallas durante unos segundos.
+3. Esto te permitirá seleccionar el índice correcto en el selector.
+
+### ¿Qué afecta esta selección?
+
+El monitor que elijas se usará para:
+- **Grabación de Video**: Grabará solo esa pantalla.
+- **Modo Dibujo**: La "foto" inicial se tomará de esa pantalla.
+- **Capturas**: Por defecto, las capturas de pantalla completa usarán este monitor.
 
 ## 🎨 Formatos Soportados
 
